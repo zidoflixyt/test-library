@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Library</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23f2a541'/%3E%3Cpath d='M16 46.5A5 5 0 0 1 21 41.5H45' stroke='%231a1206' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M21 15h24v34H21A5 5 0 0 1 16 44V20a5 5 0 0 1 5-5z' stroke='%231a1206' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0b0e1c;
+    --panel: #161b32;
+    --panel-2: #1e2444;
+    --line: #2b3157;
+    --amber: #f2a541;
+    --amber-2: #ffc670;
+    --amber-dim: #f2a54120;
+    --ivory: #f4efe4;
+    --muted: #8891bb;
+    --danger: #e2685b;
+    --good: #6bcf9a;
+    --radius: 18px;
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh;
+    background:
+      radial-gradient(circle at 15% -10%, #2a3266 0%, transparent 40%),
+      radial-gradient(circle at 100% 10%, #201b45 0%, transparent 35%),
+      var(--bg);
+    color:var(--ivory);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .icon{ width:18px; height:18px; display:inline-block; vertical-align:middle; flex-shrink:0; }
+  .icon svg{ width:100%; height:100%; display:block; }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 20px 0; max-width: 820px; margin: 0 auto;
+  }
+  .brand{ display:flex; align-items:center; gap:11px; }
+  .brand .mark{
+    width:38px; height:38px; border-radius:11px;
+    background: linear-gradient(135deg, var(--amber-2), #d9822b);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 4px 14px #f2a54140; color:#1a1206;
+  }
+  .brand .mark .icon{ width:20px; height:20px; }
+  .brand .name{ font-family: var(--font-display); font-weight:700; font-size:17px; letter-spacing:.2px; }
+  .topbar-actions{ display:flex; gap:8px; }
+  .icon-btn{
+    width:38px; height:38px; border-radius: 11px; border:1px solid var(--line);
+    background: var(--panel); color: var(--muted);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition: all .15s ease;
+  }
+  .icon-btn:hover{ background: var(--panel-2); color:var(--ivory); transform: translateY(-1px); }
+  .icon-btn.spinning .icon{ animation: spin .8s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .settings-panel{ max-width: 820px; margin: 10px auto 0; padding: 0 20px; }
+  .settings-inner{
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 18px; display:flex; align-items:center; justify-content:space-between; gap: 12px;
+    max-height:0; overflow:hidden; opacity:0; padding-top:0; padding-bottom:0; margin-top:0;
+    transition: all .25s ease;
+  }
+  .settings-panel.open .settings-inner{
+    max-height:100px; opacity:1; padding-top:16px; padding-bottom:16px; margin-top:10px;
+  }
+  .settings-row-label{ font-size:13px; color: var(--muted); }
+  .lang-toggle{ display:flex; background: #10142a; border-radius: 999px; padding: 3px; border:1px solid var(--line); }
+  .lang-toggle button{
+    border:none; background:transparent; color: var(--muted); padding: 7px 16px;
+    border-radius: 999px; font-size: 13px; font-weight:600; cursor:pointer; transition: all .18s ease;
+  }
+  .lang-toggle button.active{ background: var(--amber); color: #1a1206; }
+
+  .hero{ max-width: 820px; margin: 0 auto; padding: 26px 20px 4px; text-align:center; }
+  .hero .eyebrow{ letter-spacing: 3px; font-size: 11px; color: var(--amber); text-transform:uppercase; font-weight:700; }
+  .hero h1{
+    font-family: var(--font-display);
+    font-size: 30px; margin: 10px 0 6px; font-weight: 700; letter-spacing: -.3px;
+    background: linear-gradient(90deg, var(--ivory), var(--amber-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p{ color: var(--muted); font-size: 13.5px; margin:0; }
+
+  .stats-row{
+    display:flex; gap:10px; justify-content:center; margin-top: 18px; flex-wrap:wrap;
+  }
+  .stat-chip{
+    background: var(--panel); border:1px solid var(--line); border-radius: 999px;
+    padding: 7px 14px; font-size: 12px; color: var(--muted); display:flex; align-items:center; gap:6px;
+  }
+  .stat-chip b{ color: var(--ivory); font-size:13px; }
+  .stat-chip .icon{ width:13px; height:13px; color: var(--amber); }
+  .stat-chip .dot{ width:7px; height:7px; border-radius:50%; background: var(--good); }
+  .stat-chip .dot.err{ background: var(--danger); }
+
+  .wrap{ max-width: 820px; margin: 0 auto; padding: 0 20px 60px; }
+
+  .searchbar{
+    margin-top:20px; display:flex; align-items:center; gap:10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 16px;
+  }
+  .searchbar .icon{ color: var(--muted); width:17px; height:17px; }
+  .searchbar input{
+    flex:1; background:none; border:none; outline:none; color: var(--ivory); font-size: 14px;
+    font-family: inherit;
+  }
+  .searchbar input::placeholder{ color: var(--muted); }
+
+  .status{
+    margin-top:14px; padding: 12px 16px; border-radius: 12px;
+    background: var(--panel); border:1px solid var(--line);
+    font-size: 13px; color: var(--muted); text-align:center;
+  }
+  .status.error{ color: var(--danger); border-color: #e2685b55; background: #e2685b0d; }
+
+  .shelf-title{
+    text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; font-weight:700;
+    color: var(--muted); margin: 26px 0 12px 2px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .shelf-title .count{ color: var(--amber); }
+
+  #list{ display:flex; flex-direction:column; gap:6px; }
+  .group-heading{
+    font-family: var(--font-display);
+    font-size: 13px; font-weight:700; color: var(--amber);
+    text-transform: uppercase; letter-spacing: 1px;
+    margin: 18px 2px 4px;
+  }
+  .group-heading:first-child{ margin-top: 4px; }
+  .group-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap:12px; margin-bottom: 6px;
+  }
+  .book{
+    position:relative; overflow:hidden;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px; cursor:pointer;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    animation: rise .35s ease both;
+  }
+  @keyframes rise{ from{ opacity:0; transform: translateY(8px); } to{ opacity:1; transform:translateY(0); } }
+  .book:hover{
+    transform: translateY(-3px);
+    border-color: var(--amber);
+    box-shadow: 0 10px 24px #00000055;
+  }
+  .book::after{
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(135deg, var(--amber-dim), transparent 60%);
+    opacity:0; transition: opacity .18s ease;
+  }
+  .book:hover::after{ opacity:1; }
+  .book .spine{
+    width:40px; height:40px; border-radius:11px; background: var(--amber-dim); color: var(--amber-2);
+    display:flex; align-items:center; justify-content:center; margin-bottom:12px;
+  }
+  .book .spine .icon{ width:20px; height:20px; }
+  .book .name{ font-family: var(--font-display); font-size: 14.5px; font-weight:600; line-height:1.3; margin-bottom:6px; word-break:break-word; }
+  .book .meta{ font-size: 11px; color: var(--muted); display:flex; align-items:center; gap:6px; }
+  .book .meta .icon{ width:12px; height:12px; }
+  .book .go{
+    position:absolute; right:14px; bottom:14px; font-size:13px; color: var(--amber); font-weight:600;
+    opacity:0; transform: translateX(-4px); transition: all .18s ease;
+  }
+  .book:hover .go{ opacity:1; transform:translateX(0); }
+
+  .back-btn{
+    cursor:pointer; color: var(--amber); font-size:13px; font-weight:700;
+    margin: 4px 2px 16px; display:inline-flex; align-items:center; gap:6px;
+    user-select:none;
+  }
+  .back-btn:hover{ color: var(--amber-2); }
+  .back-btn .icon{ width:14px; height:14px; }
+
+  .subject-card .spine{ background: var(--amber-dim); }
+
+  .skeleton{
+    background: var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; height:104px;
+    position:relative; overflow:hidden;
+  }
+  .skeleton::after{
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(90deg, transparent, #ffffff0c, transparent);
+    animation: shimmer 1.3s infinite;
+  }
+  @keyframes shimmer{ from{ transform: translateX(-100%);} to{ transform: translateX(100%);} }
+
+  .empty{
+    grid-column: 1/-1;
+    color: var(--muted); font-size: 13px; text-align:center; padding: 32px 20px;
+    border: 1px dashed var(--line); border-radius: var(--radius);
+  }
+  .empty .icon{ width:30px; height:30px; margin:0 auto 10px; color: var(--line); display:block; }
+
+  #loginScreen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-card{
+    width:100%; max-width:360px; background: var(--panel); border:1px solid var(--line);
+    border-radius: var(--radius); padding:28px 24px; text-align:center;
+  }
+  .login-card .mark{
+    width:48px; height:48px; border-radius:14px; margin:0 auto 14px;
+    background: linear-gradient(135deg, var(--amber-2), #d9822b); color:#1a1206;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .login-card .mark .icon{ width:24px; height:24px; }
+  .login-card h2{ font-family: var(--font-display); margin: 0 0 6px; font-size:20px; font-weight:700; }
+  .login-card p{ color:var(--muted); font-size:12.5px; margin:0 0 20px; }
+  .login-field{ text-align:left; margin-bottom:12px; }
+  .login-field label{ display:block; font-size:11.5px; color:var(--muted); margin-bottom:6px; }
+  .login-field input{
+    width:100%; background:#10142a; border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; color:var(--ivory); font-size:14px; font-family:inherit; outline:none;
+  }
+  .login-field input:focus{ border-color: var(--amber); }
+  .login-btn{
+    width:100%; margin-top:8px; padding:12px; border:none; border-radius:10px;
+    background: var(--amber); color:#1a1206; font-weight:700; font-size:14px; cursor:pointer;
+    transition: transform .15s ease;
+  }
+  .login-btn:hover{ transform: translateY(-1px); }
+  .login-error{
+    margin-top:12px; color: var(--danger); font-size:12.5px; display:none;
+  }
+  .logout-btn{
+    border:none; background:transparent; color: var(--danger); font-size:13px; font-weight:600;
+    cursor:pointer; padding:0;
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="mark"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span></div>
+    <h2 data-i18n="loginTitle">Test Library</h2>
+    <p data-i18n="loginSubtitle">Enter your username and password to continue</p>
+    <form id="loginForm">
+      <div class="login-field">
+        <label data-i18n="userLabel">Username</label>
+        <input type="text" id="loginUser" autocomplete="username" required>
+      </div>
+      <div class="login-field">
+        <label data-i18n="passLabel">Password</label>
+        <input type="password" id="loginPass" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="login-btn" data-i18n="loginBtn">Log in</button>
+      <div class="login-error" id="loginError" data-i18n="loginError">Wrong username or password</div>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div>
+    <div class="name" data-i18n="brand">Test Library</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="refreshBtn" aria-label="Refresh"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span></button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></button>
+  </div>
+</div>
+
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-inner">
+    <div class="settings-row-label" data-i18n="langLabel">Language</div>
+    <div class="lang-toggle">
+      <button id="btnEN" class="active">English</button>
+      <button id="btnHI">हिंदी</button>
+    </div>
+  </div>
+  <div class="settings-inner" style="margin-top:8px;">
+    <div class="settings-row-label" data-i18n="loggedInAs">Logged in</div>
+    <button class="logout-btn" id="logoutBtn" data-i18n="logoutBtn">Log out</button>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="eyebrow" data-i18n="eyebrow">Shared</div>
+  <h1 data-i18n="title">Test Library</h1>
+  <p data-i18n="subtitle">Tests uploaded to the shared folder appear here for everyone</p>
+  <div class="stats-row">
+    <div class="stat-chip"><span class="dot" id="statusDot"></span><b id="countNum">0</b><span data-i18n="testsWord"> tests</span></div>
+    <div class="stat-chip"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span><b id="lastSync">—</b></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="searchbar">
+    <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+    <input type="text" id="searchInput" data-i18n-ph="searchPh" placeholder="Search tests…">
+  </div>
+
+  <div class="status" id="status" style="display:none;"></div>
+
+  <div class="shelf-title">
+    <span data-i18n="shelf">Available tests</span>
+  </div>
+  <div id="list"></div>
+</div>
+</div>
+
+<script>
+/* ====== CONFIGURE THESE VALUES ====== */
+const API_KEY = "AIzaSyBbZIj6EF4dz3RfqaCSrPKvI5gcvV2mz3E";
+const FOLDER_ID = "123GnSkuU_686h-C7807Rg5I_E-16AUPK";
+/* Paste the Google Apps Script "Web app URL" here (see session-lock-appscript.gs
+   for the one-time free setup). This is what enforces "only one logged-in
+   session at a time" — the username/password themselves live in that script. */
+const SESSION_API_URL = "https://script.google.com/macros/s/AKfycbwmxogUfzMhU79nmGN66qsc328JQ9q0W7ZaJbHK7Xa6uj06mJbNLZo9eH4eHxKIG_qtgw/exec";
+/* ===================================== */
+
+const i18n = {
+  en: {
+    brand: "Test Library", langLabel: "Language", eyebrow: "Shared",
+    title: "Test Library", subtitle: "Tests uploaded to the shared folder appear here for everyone",
+    shelf: "Subjects", shelfTests: "Search results", loading: "Loading tests…",
+    errorKey: "Please set your Google API key in the code first.",
+    errorLoad: "Could not load tests. Check your API key and folder sharing settings.",
+    empty: "No subjects found yet", emptySearch: "No tests match your search",
+    emptySubject: "No tests uploaded here yet",
+    searchPh: "Search tests…", testsWord: " tests", testsCount: " tests",
+    back: "← All subjects", general: "General",
+    loginTitle: "Test Library", loginSubtitle: "Enter your username and password to continue",
+    userLabel: "Username", passLabel: "Password", loginBtn: "Log in",
+    loginError: "Wrong username or password", loggedInAs: "Logged in", logoutBtn: "Log out"
+  },
+  hi: {
+    brand: "टेस्ट लाइब्रेरी", langLabel: "भाषा", eyebrow: "शेयर्ड",
+    title: "टेस्ट लाइब्रेरी", subtitle: "शेयर्ड फोल्डर में डाले गए टेस्ट सबको यहां दिखेंगे",
+    shelf: "विषय", shelfTests: "सर्च परिणाम", loading: "टेस्ट लोड हो रहे हैं…",
+    errorKey: "पहले कोड में अपनी Google API key डालिए।",
+    errorLoad: "टेस्ट लोड नहीं हो पाए। API key और फोल्डर की शेयरिंग सेटिंग जांच लीजिए।",
+    empty: "अभी कोई विषय नहीं मिला", emptySearch: "आपकी सर्च से मेल खाता कोई टेस्ट नहीं मिला",
+    emptySubject: "यहाँ अभी कोई टेस्ट नहीं डाला गया",
+    searchPh: "टेस्ट खोजें…", testsWord: " टेस्ट", testsCount: " टेस्ट",
+    back: "← सभी विषय", general: "सामान्य",
+    loginTitle: "टेस्ट लाइब्रेरी", loginSubtitle: "जारी रखने के लिए यूज़रनेम और पासवर्ड डालिए",
+    userLabel: "यूज़रनेम", passLabel: "पासवर्ड", loginBtn: "लॉग इन करें",
+    loginError: "गलत यूज़रनेम या पासवर्ड", loggedInAs: "लॉग इन है", logoutBtn: "लॉग आउट"
+  }
+};
+let currentLang = 'en';
+let cachedSubjects = [];   // [{ id, name, files: [{id,name,modifiedTime}] }]
+let currentSubject = null; // null => showing the subject list
+let searchTerm = '';
+
+const ICONS = {
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
+  pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="7" y="18" font-size="7" stroke="none" fill="currentColor" font-family="sans-serif" font-weight="700">PDF</text></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.12 0L4 19"/></svg>',
+  subject: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>'
+};
+
+function iconForFile(f){
+  if(f.type === 'pdf') return ICONS.pdf;
+  if(f.type === 'image') return ICONS.image;
+  return ICONS.file;
+}
+
+function applyLang(){
+  const t = i18n[currentLang];
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(t[key]) el.textContent = t[key];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-ph');
+    if(t[key]) el.placeholder = t[key];
+  });
+  document.getElementById('btnEN').classList.toggle('active', currentLang==='en');
+  document.getElementById('btnHI').classList.toggle('active', currentLang==='hi');
+  document.documentElement.lang = currentLang;
+}
+
+document.getElementById('settingsBtn').addEventListener('click', ()=>{
+  document.getElementById('settingsPanel').classList.toggle('open');
+});
+document.getElementById('btnEN').addEventListener('click', ()=>{ currentLang='en'; localStorage.setItem('lang','en'); applyLang(); render(); });
+document.getElementById('btnHI').addEventListener('click', ()=>{ currentLang='hi'; localStorage.setItem('lang','hi'); applyLang(); render(); });
+document.getElementById('refreshBtn').addEventListener('click', loadFiles);
+document.getElementById('searchInput').addEventListener('input', e=>{
+  searchTerm = e.target.value.trim().toLowerCase();
+  render();
+});
+
+function setStatus(msg, isError){
+  const el = document.getElementById('status');
+  if(!msg){ el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+function showSkeletons(){
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for(let i=0;i<6;i++){
+    const s = document.createElement('div');
+    s.className = 'skeleton';
+    list.appendChild(s);
+  }
+}
+
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+// Which file types show up in the library, and how to recognize each one
+// (either by Drive's mimeType or by filename extension as a fallback).
+const FILE_MATCHERS = [
+  { type: 'html',  mimes: ['text/html'], ext: /\.html?$/i },
+  { type: 'pdf',   mimes: ['application/pdf'], ext: /\.pdf$/i },
+  { type: 'image', mimes: ['image/png','image/jpeg','image/gif','image/webp'], ext: /\.(png|jpe?g|gif|webp)$/i }
+];
+
+function detectFileType(f){
+  for(const m of FILE_MATCHERS){
+    if(m.mimes.includes(f.mimeType) || m.ext.test(f.name)) return m.type;
+  }
+  return null;
+}
+
+async function fetchFolderChildren(folderId){
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&key=${API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return data.files || [];
+}
+
+// Recursively walk the folder tree (up to a safe depth) and collect
+// html test files, tagging each with the subject (its parent folder name).
+async function collectFilesRecursively(folderId, subjectName, depth){
+  if(depth > 4) return [];
+  const children = await fetchFolderChildren(folderId);
+  let results = [];
+  const subfolders = children.filter(f => f.mimeType === FOLDER_MIME);
+  const files = children.filter(f =>
+    f.mimeType !== FOLDER_MIME && detectFileType(f)
+  );
+  files.forEach(f => results.push({ ...f, subject: subjectName, type: detectFileType(f) }));
+  for(const sub of subfolders){
+    const nested = await collectFilesRecursively(sub.id, sub.name, depth + 1);
+    results = results.concat(nested);
+  }
+  return results;
+}
+
+function naturalSort(a, b){
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+async function loadFiles(){
+  const t = i18n[currentLang];
+  const refreshBtn = document.getElementById('refreshBtn');
+  if(!API_KEY || API_KEY.includes('PASTE_')){
+    setStatus(t.errorKey, true);
+    document.getElementById('statusDot').classList.add('err');
+    return;
+  }
+  refreshBtn.classList.add('spinning');
+  setStatus('', false);
+  showSkeletons();
+  try{
+    // Top-level children of the shared folder: subfolders are "subjects",
+    // loose files at the top level become a "General" subject.
+    const topChildren = await fetchFolderChildren(FOLDER_ID);
+    const subjectFolders = topChildren.filter(f => f.mimeType === FOLDER_MIME);
+    const rootFiles = topChildren.filter(f =>
+      f.mimeType !== FOLDER_MIME && detectFileType(f)
+    );
+
+    const subjects = [];
+    for(const folder of subjectFolders){
+      // Every subject folder is kept even if it currently has 0 test files,
+      // so empty subjects still show up and can be opened.
+      const files = await collectFilesRecursively(folder.id, folder.name, 0);
+      files.sort(naturalSort);
+      subjects.push({ id: folder.id, name: folder.name, files });
+    }
+    if(rootFiles.length){
+      const files = rootFiles.map(f => ({ ...f, subject: t.general, type: detectFileType(f) }));
+      files.sort(naturalSort);
+      subjects.push({ id: '__root__', name: t.general, files });
+    }
+    subjects.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+    cachedSubjects = subjects;
+    const totalFiles = subjects.reduce((sum, s) => sum + s.files.length, 0);
+    document.getElementById('statusDot').classList.remove('err');
+    document.getElementById('countNum').textContent = totalFiles;
+    document.getElementById('lastSync').textContent = new Date().toLocaleTimeString(currentLang==='hi'?'hi-IN':'en-IN', {hour:'2-digit', minute:'2-digit'});
+    render();
+  }catch(err){
+    console.error(err);
+    setStatus(t.errorLoad, true);
+    document.getElementById('statusDot').classList.add('err');
+    document.getElementById('list').innerHTML = '';
+  }finally{
+    refreshBtn.classList.remove('spinning');
+  }
+}
+
+function render(){
+  if(searchTerm){
+    renderSearchResults();
+  } else if(currentSubject){
+    renderSubjectTests(currentSubject);
+  } else {
+    renderSubjectsList();
+  }
+}
+
+function buildBookCard(f, idx, icon){
+  const div = document.createElement('div');
+  div.className = 'book';
+  div.style.animationDelay = (idx * 0.03) + 's';
+  const date = new Date(f.modifiedTime).toLocaleDateString(currentLang==='hi' ? 'hi-IN':'en-IN');
+  div.innerHTML = `
+    <div class="spine"><span class="icon">${icon || iconForFile(f)}</span></div>
+    <div class="name">${escapeHtml(f.name)}</div>
+    <div class="meta"><span class="icon">${ICONS.clock}</span> ${date}</div>
+    <div class="go">Open →</div>
+  `;
+  div.addEventListener('click', ()=>openFile(f));
+  return div;
+}
+
+function renderSubjectsList(){
+  const t = i18n[currentLang];
+  const list = document.getElementById('list');
+  document.querySelector('.shelf-title span').textContent = t.shelf;
+
+  if(cachedSubjects.length === 0){
+    list.innerHTML = `<div class="empty"><span class="icon">${ICONS.inbox}</span>${t.empty}</div>`;
+    return;
+  }
+  list.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'group-grid';
+  cachedSubjects.forEach((s, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'book subject-card';
+    div.style.animationDelay = (idx * 0.03) + 's';
+    div.innerHTML = `
+      <div class="spine"><span class="icon">${ICONS.subject}</span></div>
+      <div class="name">${escapeHtml(s.name)}</div>
+      <div class="meta">${s.files.length}${t.testsCount}</div>
+      <div class="go">Open →</div>
+    `;
+    div.addEventListener('click', ()=>{ currentSubject = s; render(); });
+    grid.appendChild(div);
+  });
+  list.appendChild(grid);
+}
+
+function renderSubjectTests(subject){
+  const t = i18n[currentLang];
+  const list = document.getElementById('list');
+  document.querySelector('.shelf-title span').textContent = subject.name;
+  list.innerHTML = '';
+
+  const back = document.createElement('div');
+  back.className = 'back-btn';
+  back.innerHTML = `<span class="icon">${ICONS.back}</span>${t.back.replace('← ', '')}`;
+  back.addEventListener('click', ()=>{ currentSubject = null; render(); });
+  list.appendChild(back);
+
+  if(subject.files.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<span class="icon">${ICONS.inbox}</span>${t.emptySubject}`;
+    list.appendChild(empty);
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'group-grid';
+  subject.files.forEach((f, idx)=> grid.appendChild(buildBookCard(f, idx)));
+  list.appendChild(grid);
+}
+
+function renderSearchResults(){
+  const t = i18n[currentLang];
+  const list = document.getElementById('list');
+  document.querySelector('.shelf-title span').textContent = t.shelfTests;
+  list.innerHTML = '';
+
+  const allFiles = [];
+  cachedSubjects.forEach(s => s.files.forEach(f => allFiles.push({ ...f, subject: s.name })));
+  const filtered = allFiles.filter(f => f.name.toLowerCase().includes(searchTerm));
+
+  if(filtered.length === 0){
+    list.innerHTML = `<div class="empty"><span class="icon">${ICONS.search}</span>${t.emptySearch}</div>`;
+    return;
+  }
+
+  const groups = {};
+  filtered.forEach(f=>{
+    if(!groups[f.subject]) groups[f.subject] = [];
+    groups[f.subject].push(f);
+  });
+
+  let idx = 0;
+  Object.keys(groups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(subject=>{
+    const heading = document.createElement('div');
+    heading.className = 'group-heading';
+    heading.textContent = subject;
+    list.appendChild(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'group-grid';
+    groups[subject].forEach(f=>{ grid.appendChild(buildBookCard(f, idx)); idx++; });
+    list.appendChild(grid);
+  });
+}
+
+async function openFile(file){
+  const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}`;
+  try{
+    if(file.type === 'html'){
+      // HTML tests are fetched and reopened as a blob so they run as a
+      // standalone page (not wrapped in Drive's viewer).
+      const res = await fetch(url);
+      const html = await res.text();
+      const blob = new Blob([html], {type:'text/html'});
+      window.open(URL.createObjectURL(blob), '_blank');
+    } else {
+      // PDFs and images: the browser (or the WebView shell around this app)
+      // can display these directly, so just open the direct-download link.
+      window.open(url, '_blank');
+    }
+  }catch(err){
+    console.error(err);
+  }
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+const TOKEN_KEY = 'test_library_session_token';
+const USER_KEY = 'test_library_session_user';
+let sessionCheckTimer = null;
+
+function setLoginBusy(busy){
+  const btn = document.querySelector('#loginForm .login-btn');
+  btn.disabled = busy;
+  btn.style.opacity = busy ? '0.6' : '1';
+}
+
+function showApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const saved = localStorage.getItem('lang');
+  if(saved === 'hi' || saved === 'en') currentLang = saved;
+  applyLang();
+  loadFiles();
+  startSessionWatch();
+}
+
+function showLogin(kickedOut){
+  clearInterval(sessionCheckTimer);
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  const errorEl = document.getElementById('loginError');
+  if(kickedOut){
+    errorEl.textContent = currentLang === 'hi'
+      ? 'किसी और डिवाइस पर लॉगिन होने की वजह से यह सेशन बंद कर दिया गया।'
+      : 'You were logged out because someone logged in elsewhere with the same details.';
+    errorEl.style.display = 'block';
+  }
+}
+
+let jsonpCounter = 0;
+function sessionApi(params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'sessionApiCb_' + (jsonpCounter++) + '_' + Date.now();
+    const timeoutId = setTimeout(()=>{
+      cleanup();
+      reject(new Error('timeout'));
+    }, 10000);
+
+    const script = document.createElement('script');
+
+    function cleanup(){
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = (data)=>{
+      cleanup();
+      resolve(data);
+    };
+
+    const query = new URLSearchParams({ ...params, callback: cbName }).toString();
+    script.src = SESSION_API_URL + '?' + query;
+    script.onerror = ()=>{
+      cleanup();
+      reject(new Error('script load failed'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
+async function startSessionWatch(){
+  clearInterval(sessionCheckTimer);
+  sessionCheckTimer = setInterval(async ()=>{
+    const token = localStorage.getItem(TOKEN_KEY);
+    const username = localStorage.getItem(USER_KEY);
+    if(!token || !username) return;
+    try{
+      const data = await sessionApi({ action: 'check', token, username });
+      if(!data.valid){
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        showLogin(true);
+      }
+    }catch(err){
+      console.error('session check failed', err);
+    }
+  }, 20000); // re-check every 20s so a takeover elsewhere gets noticed quickly
+}
+
+document.getElementById('loginForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const errorEl = document.getElementById('loginError');
+  errorEl.style.display = 'none';
+
+  if(!SESSION_API_URL || SESSION_API_URL.includes('PASTE_')){
+    errorEl.textContent = currentLang === 'hi'
+      ? 'पहले session-lock-appscript.gs सेटअप करके उसका URL कोड में डालिए।'
+      : 'Set up session-lock-appscript.gs first and paste its URL in the code.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  setLoginBusy(true);
+  try{
+    const data = await sessionApi({ action: 'login', username: user, password: pass });
+    if(data.ok){
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, user);
+      showApp();
+    }else{
+      errorEl.textContent = i18n[currentLang].loginError;
+      errorEl.style.display = 'block';
+    }
+  }catch(err){
+    console.error(err);
+    errorEl.textContent = currentLang === 'hi'
+      ? 'लॉगिन सर्वर से संपर्क नहीं हो पाया।'
+      : 'Could not reach the login server.';
+    errorEl.style.display = 'block';
+  }finally{
+    setLoginBusy(false);
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  const token = localStorage.getItem(TOKEN_KEY);
+  const username = localStorage.getItem(USER_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  try{ if(token && username) await sessionApi({ action: 'logout', token, username }); }catch(err){ console.error(err); }
+  location.reload();
+});
+
+(async function initAuth(){
+  const saved = localStorage.getItem('lang');
+  if(saved === 'hi' || saved === 'en') currentLang = saved;
+  applyLang();
+
+  const token = localStorage.getItem(TOKEN_KEY);
+  const username = localStorage.getItem(USER_KEY);
+  if(!token || !username) return;
+  if(!SESSION_API_URL || SESSION_API_URL.includes('PASTE_')){ return; }
+  try{
+    const data = await sessionApi({ action: 'check', token, username });
+    if(data.valid){
+      showApp();
+    }else{
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
+  }catch(err){
+    console.error('session check failed', err);
+  }
+})();
+
+</script>
+
+</body>
+</html>
