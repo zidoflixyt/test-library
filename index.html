@@ -635,19 +635,36 @@ async function openFile(file){
   const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}`;
   try{
     if(file.type === 'html'){
-      // HTML tests are fetched and reopened as a blob so they run as a
-      // standalone page (not wrapped in Drive's viewer).
+      // Fetch (background request) — Google treats this as normal app
+      // traffic. Then render the fetched HTML by rewriting the CURRENT
+      // document in place (no navigation to the API URL, no blob: URL
+      // navigation) — this is what works reliably both in mobile
+      // browsers and inside WebView-based APK shells.
       const res = await fetch(url);
+      if(!res.ok) throw new Error('fetch failed: ' + res.status);
       const html = await res.text();
-      const blob = new Blob([html], {type:'text/html'});
-      window.open(URL.createObjectURL(blob), '_blank');
+      document.open();
+      document.write(html);
+      document.close();
     } else {
-      // PDFs and images: the browser (or the WebView shell around this app)
-      // can display these directly, so just open the direct-download link.
-      window.open(url, '_blank');
+      // PDFs and images: fetch as a blob and embed it inline on a fresh
+      // page (again, no top-level navigation to the API URL or to the
+      // blob itself — just an <embed>/<img> referencing the blob).
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('fetch failed: ' + res.status);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      document.open();
+      if(file.type === 'pdf'){
+        document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><embed src="${objUrl}" type="application/pdf" style="width:100vw;height:100vh;border:none;"></body></html>`);
+      } else {
+        document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#0b0e1c;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${objUrl}" style="max-width:100%;height:auto;"></body></html>`);
+      }
+      document.close();
     }
   }catch(err){
     console.error(err);
+    alert('Could not open this file. Please check your internet connection and try again.');
   }
 }
 
