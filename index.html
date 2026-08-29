@@ -353,6 +353,14 @@ const i18n = {
     loginError: "गलत यूज़रनेम या पासवर्ड", loggedInAs: "लॉग इन है", logoutBtn: "लॉग आउट"
   }
 };
+// TEMPORARY DEBUG HELPER: surfaces any hidden JavaScript error as a
+// visible alert, since APK/WebView shells give no console access.
+// (Safe to remove later once the file-open issue is confirmed fixed.)
+window.onerror = function(msg, src, line, col, err){
+  alert('DEBUG - JS Error:\n' + msg + '\n(line ' + line + ')');
+  return false;
+};
+
 let currentLang = 'en';
 let cachedSubjects = [];   // [{ id, name, files: [{id,name,modifiedTime}] }]
 let currentSubject = null; // null => showing the subject list
@@ -632,6 +640,7 @@ function renderSearchResults(){
 }
 
 async function openFile(file){
+  alert('DEBUG - tapped: ' + file.name + ' (type: ' + file.type + ')'); // TEMPORARY DEBUG
   const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}`;
   try{
     if(file.type === 'html'){
@@ -664,7 +673,7 @@ async function openFile(file){
     }
   }catch(err){
     console.error(err);
-    alert('Could not open this file. Please check your internet connection and try again.');
+    alert('DEBUG - openFile error:\n' + err.message); // TEMPORARY DEBUG
   }
 }
 
