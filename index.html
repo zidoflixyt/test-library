@@ -201,6 +201,11 @@
   @keyframes rise{ from{ opacity:0; transform: translateY(6px); } to{ opacity:1; transform:translateY(0); } }
   .index-card:active{ transform: scale(.99); }
   .index-card--empty{ opacity: .55; }
+  .mode-card{ padding: 18px 16px 18px 22px; margin-bottom: 10px; }
+  .mode-card .card-icon{ width:38px; height:38px; }
+  .mode-card .card-icon .icon{ width:19px; height:19px; }
+  .mode-card .card-name{ font-size: 18px; }
+  .mode-card .card-meta{ margin-top:3px; }
   .card-accent{
     position:absolute; left:0; top:0; bottom:0; width:5px;
     background: var(--sw, var(--accent)); border-radius: var(--radius) 0 0 var(--radius);
@@ -422,7 +427,10 @@ const i18n = {
     loginError: "Wrong username or password", loggedInAs: "Logged in", logoutBtn: "Log out",
     exitEyebrow: "checkout slip", exitTitle: "Close the library?",
     exitBody: "Leaving now will close the app.",
-    exitStay: "Keep studying", exitLeave: "Exit app"
+    exitStay: "Keep studying", exitLeave: "Exit app",
+    modeTestTitle: "Test", modeTestSub: "Practice quizzes & mock tests",
+    modeStudyTitle: "Study", modeStudySub: "Chapter notes & documents",
+    backHome: "Home", downloadError: "Could not download this file. Please check your internet connection and try again."
   },
   hi: {
     brand: "टेस्ट लाइब्रेरी", langLabel: "भाषा", eyebrow: "कार्ड कैटलॉग",
@@ -440,11 +448,15 @@ const i18n = {
     loginError: "गलत यूज़रनेम या पासवर्ड", loggedInAs: "लॉग इन है", logoutBtn: "लॉग आउट",
     exitEyebrow: "चेकआउट स्लिप", exitTitle: "लाइब्रेरी बंद करें?",
     exitBody: "अभी बाहर जाने से ऐप बंद हो जाएगा।",
-    exitStay: "पढ़ाई जारी रखें", exitLeave: "ऐप बंद करें"
+    exitStay: "पढ़ाई जारी रखें", exitLeave: "ऐप बंद करें",
+    modeTestTitle: "टेस्ट", modeTestSub: "प्रैक्टिस क्विज़ और मॉक टेस्ट",
+    modeStudyTitle: "स्टडी", modeStudySub: "चैप्टर नोट्स और डॉक्यूमेंट्स",
+    backHome: "होम", downloadError: "फ़ाइल डाउनलोड नहीं हो पाई। कृपया अपना इंटरनेट कनेक्शन जांचें और फिर से कोशिश करें।"
   }
 };
 let currentLang = 'en';
 let cachedSubjects = [];   // [{ id, name, files: [{id,name,modifiedTime}] }]
+let currentMode = null;    // null => showing the Test/Study mode-select screen
 let currentSubject = null; // null => showing the subject list
 let searchTerm = '';
 
@@ -463,7 +475,10 @@ const ICONS = {
   landmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 21 8 3 8"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-  moon: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20.4 14.7A8.5 8.5 0 0 1 9.3 3.6a8.5 8.5 0 1 0 11.1 11.1z"/></svg>'
+  moon: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20.4 14.7A8.5 8.5 0 0 1 9.3 3.6a8.5 8.5 0 1 0 11.1 11.1z"/></svg>',
+  docx: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="6.3" y="18" font-size="6.2" stroke="none" fill="currentColor" font-family="sans-serif" font-weight="700">DOC</text></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h6a2 2 0 0 1 2 2V20a1.8 1.8 0 0 0-1.8-1.5H2z"/><path d="M22 4.5h-6a2 2 0 0 0-2 2V20a1.8 1.8 0 0 1 1.8-1.5H22z"/></svg>'
 };
 
 const SWATCHES = ['purple', 'blue', 'coral', 'teal', 'pink'];
@@ -472,7 +487,17 @@ const SWATCH_ICONS = [ICONS.scale, ICONS.map, ICONS.landmark, ICONS.chart, ICONS
 function iconForFile(f){
   if(f.type === 'pdf') return ICONS.pdf;
   if(f.type === 'image') return ICONS.image;
+  if(f.type === 'docx') return ICONS.docx;
   return ICONS.file;
+}
+
+// A subject folder can hold both quiz files and .docx chapter notes mixed
+// together — this splits them by the currently chosen mode so "Test"
+// only ever shows quiz-type files and "Study" only ever shows .docx.
+function filesForMode(files){
+  return currentMode === 'study'
+    ? files.filter(f => f.type === 'docx')
+    : files.filter(f => f.type !== 'docx');
 }
 
 function applyLang(){
@@ -536,18 +561,23 @@ function initHistoryGuard(){
 
 function restoreFromUrl(){
   const params = new URLSearchParams(location.search);
+  const mode = params.get('mode');
   const sid = params.get('subject');
   const sTerm = params.get('search');
-  if(sid){
-    const found = cachedSubjects.find(s => s.id === sid);
-    if(found){
-      currentSubject = found;
-      history.pushState({ view: 'subject', id: found.id }, '', location.pathname);
+  if(mode === 'test' || mode === 'study'){
+    currentMode = mode;
+    history.pushState({ view: 'mode', mode: mode }, '', location.pathname);
+    if(sid){
+      const found = cachedSubjects.find(s => s.id === sid);
+      if(found){
+        currentSubject = found;
+        history.pushState({ view: 'subject', id: found.id }, '', location.pathname);
+      }
+    } else if(sTerm){
+      searchTerm = sTerm.toLowerCase();
+      document.getElementById('searchInput').value = sTerm;
+      history.pushState({ view: 'search' }, '', location.pathname);
     }
-  } else if(sTerm){
-    searchTerm = sTerm.toLowerCase();
-    document.getElementById('searchInput').value = sTerm;
-    history.pushState({ view: 'search' }, '', location.pathname);
   }
   render();
 }
@@ -569,15 +599,21 @@ document.getElementById('exitLeaveBtn').addEventListener('click', function(){
 
 window.addEventListener('popstate', function(){
   if(document.getElementById('app').style.display === 'none') return; // not logged in yet
-  if(currentSubject || searchTerm){
-    currentSubject = null;
+  if(searchTerm){
     searchTerm = '';
     document.getElementById('searchInput').value = '';
     render();
+  } else if(currentSubject){
+    currentSubject = null;
+    render();
+  } else if(currentMode){
+    currentMode = null;
+    render();
   } else {
-    // Already at the root list — this back press would otherwise leave
-    // the app, so intercept it: show the confirmation and restore the
-    // guard state to cancel the exit until the person decides.
+    // Already at the true root (mode-select) — this back press would
+    // otherwise leave the app, so intercept it: show the confirmation
+    // and restore the guard state to cancel the exit until the person
+    // decides.
     history.pushState({ guard: true }, '', location.pathname);
     showExitDialog();
   }
@@ -623,7 +659,8 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const FILE_MATCHERS = [
   { type: 'html',  mimes: ['text/html'], ext: /\.html?$/i },
   { type: 'pdf',   mimes: ['application/pdf'], ext: /\.pdf$/i },
-  { type: 'image', mimes: ['image/png','image/jpeg','image/gif','image/webp'], ext: /\.(png|jpe?g|gif|webp)$/i }
+  { type: 'image', mimes: ['image/png','image/jpeg','image/gif','image/webp'], ext: /\.(png|jpe?g|gif|webp)$/i },
+  { type: 'docx',  mimes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'], ext: /\.docx$/i }
 ];
 
 function detectFileType(f){
@@ -700,10 +737,7 @@ async function loadFiles(){
     subjects.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
     cachedSubjects = subjects;
-    const totalFiles = subjects.reduce((sum, s) => sum + s.files.length, 0);
     document.getElementById('statusDot').classList.remove('err');
-    document.getElementById('countNum').textContent = totalFiles;
-    document.getElementById('lastSync').textContent = new Date().toLocaleTimeString(currentLang==='hi'?'hi-IN':'en-IN', {hour:'2-digit', minute:'2-digit'});
     render();
   }catch(err){
     console.error(err);
@@ -716,6 +750,14 @@ async function loadFiles(){
 }
 
 function render(){
+  const inMode = !!currentMode;
+  document.querySelector('.searchbar').style.display = inMode ? 'flex' : 'none';
+  document.querySelector('.stats-row').style.display = inMode ? 'flex' : 'none';
+  if(!inMode){
+    renderModeSelect();
+    return;
+  }
+  updateStatsForMode();
   if(searchTerm){
     renderSearchResults();
   } else if(currentSubject){
@@ -725,10 +767,58 @@ function render(){
   }
 }
 
+function updateStatsForMode(){
+  const total = cachedSubjects.reduce((sum, s) => sum + filesForMode(s.files).length, 0);
+  document.getElementById('countNum').textContent = total;
+  document.getElementById('lastSync').textContent = new Date().toLocaleTimeString(currentLang==='hi'?'hi-IN':'en-IN', {hour:'2-digit', minute:'2-digit'});
+}
+
 function setFileFooter(text){
   const el = document.getElementById('fileCount');
   if(text){ el.textContent = text; el.parentElement.style.display = 'block'; }
   else { el.parentElement.style.display = 'none'; }
+}
+
+function chooseMode(mode){
+  currentMode = mode;
+  currentSubject = null;
+  searchTerm = '';
+  document.getElementById('searchInput').value = '';
+  history.pushState({ view: 'mode', mode: mode }, '', location.pathname);
+  render();
+}
+
+function renderModeSelect(){
+  const t = i18n[currentLang];
+  setFileFooter('');
+  document.getElementById('status').style.display = 'none';
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  const testCard = document.createElement('div');
+  testCard.className = 'index-card mode-card';
+  testCard.style.setProperty('--sw', 'var(--accent)');
+  testCard.style.setProperty('--sw-bg', 'var(--search-bg)');
+  testCard.innerHTML = `
+    <div class="card-accent"></div>
+    <div class="card-icon"><span class="icon">${ICONS.pencil}</span></div>
+    <div class="card-body"><p class="card-name">${t.modeTestTitle}</p><p class="card-meta">${t.modeTestSub}</p></div>
+    <span class="icon card-arrow">${ICONS.chevron}</span>
+  `;
+  testCard.addEventListener('click', ()=> chooseMode('test'));
+
+  const studyCard = document.createElement('div');
+  studyCard.className = 'index-card mode-card swatch-teal';
+  studyCard.innerHTML = `
+    <div class="card-accent"></div>
+    <div class="card-icon"><span class="icon">${ICONS.book}</span></div>
+    <div class="card-body"><p class="card-name">${t.modeStudyTitle}</p><p class="card-meta">${t.modeStudySub}</p></div>
+    <span class="icon card-arrow">${ICONS.chevron}</span>
+  `;
+  studyCard.addEventListener('click', ()=> chooseMode('study'));
+
+  list.appendChild(testCard);
+  list.appendChild(studyCard);
 }
 
 function buildBookCard(f, idx){
@@ -752,24 +842,34 @@ function buildBookCard(f, idx){
 function renderSubjectsList(){
   const t = i18n[currentLang];
   const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  const back = document.createElement('div');
+  back.className = 'back-btn';
+  back.innerHTML = `<span class="icon">${ICONS.back}</span>${t.backHome}`;
+  back.addEventListener('click', ()=> history.back());
+  list.appendChild(back);
 
   if(cachedSubjects.length === 0){
-    list.innerHTML = `<div class="empty"><span class="icon">${ICONS.inbox}</span>${t.empty}</div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<span class="icon">${ICONS.inbox}</span>${t.empty}`;
+    list.appendChild(empty);
     setFileFooter('');
     return;
   }
-  list.innerHTML = '';
   cachedSubjects.forEach((s, idx)=>{
+    const count = filesForMode(s.files).length;
     const swatch = SWATCHES[idx % SWATCHES.length];
     const icon = SWATCH_ICONS[idx % SWATCH_ICONS.length];
     const div = document.createElement('div');
-    div.className = `index-card swatch-${swatch}` + (s.files.length === 0 ? ' index-card--empty' : '');
+    div.className = `index-card swatch-${swatch}` + (count === 0 ? ' index-card--empty' : '');
     div.style.animationDelay = (idx * 0.03) + 's';
     div.innerHTML = `
       <div class="card-accent"></div>
       <div class="card-icon"><span class="icon">${icon}</span></div>
       <div class="card-body"><p class="card-name">${escapeHtml(s.name)}</p></div>
-      <span class="card-count">${s.files.length}</span>
+      <span class="card-count">${count}</span>
       <span class="icon card-arrow">${ICONS.chevron}</span>
     `;
     div.addEventListener('click', ()=> openSubject(s));
@@ -790,14 +890,15 @@ function renderSubjectTests(subject){
   back.addEventListener('click', ()=> history.back());
   list.appendChild(back);
 
-  if(subject.files.length === 0){
+  const files = filesForMode(subject.files);
+  if(files.length === 0){
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.innerHTML = `<span class="icon">${ICONS.inbox}</span>${t.emptySubject}`;
     list.appendChild(empty);
     return;
   }
-  subject.files.forEach((f, idx)=> list.appendChild(buildBookCard(f, idx)));
+  files.forEach((f, idx)=> list.appendChild(buildBookCard(f, idx)));
 }
 
 function renderSearchResults(){
@@ -807,7 +908,7 @@ function renderSearchResults(){
   setFileFooter('');
 
   const allFiles = [];
-  cachedSubjects.forEach(s => s.files.forEach(f => allFiles.push({ ...f, subject: s.name })));
+  cachedSubjects.forEach(s => filesForMode(s.files).forEach(f => allFiles.push({ ...f, subject: s.name })));
   const filtered = allFiles.filter(f => f.name.toLowerCase().includes(searchTerm));
 
   if(filtered.length === 0){
@@ -834,16 +935,19 @@ function renderSearchResults(){
 
 function makeReturnScript(){
   // Built here, BEFORE document.write() replaces the current document, so
-  // we can still read currentSubject/searchTerm from this app's JS state.
-  // The tag text is assembled with string concatenation on purpose (never
-  // written as a literal "<script"/"</script>" substring in this file) so
-  // the browser's initial parse of THIS page isn't confused by it — it
-  // only becomes a real <script> tag once document.write() parses the
-  // freshly assembled HTML as the NEW document.
+  // we can still read currentMode/currentSubject/searchTerm from this
+  // app's JS state. The tag text is assembled with string concatenation
+  // on purpose (the closing tag is never written as one contiguous piece
+  // in this file) so the browser's initial parse of THIS page isn't
+  // confused by it — it only becomes a real element once document.write()
+  // parses the freshly assembled HTML as the NEW document.
   const base = location.origin + location.pathname;
   let target = base;
-  if(currentSubject){ target = base + '?subject=' + encodeURIComponent(currentSubject.id); }
-  else if(searchTerm){ target = base + '?search=' + encodeURIComponent(searchTerm); }
+  if(currentMode){
+    target = base + '?mode=' + currentMode;
+    if(currentSubject) target += '&subject=' + encodeURIComponent(currentSubject.id);
+    else if(searchTerm) target += '&search=' + encodeURIComponent(searchTerm);
+  }
   const js = "(function(){try{history.pushState({fromLibrary:true},'',location.href);}catch(e){}"
     + "window.addEventListener('popstate',function(){location.href=" + JSON.stringify(target) + ";});"
     + "})();";
@@ -852,6 +956,31 @@ function makeReturnScript(){
 
 async function openFile(file){
   const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}`;
+  const t = i18n[currentLang];
+
+  if(file.type === 'docx'){
+    // Word documents can't be previewed inline by a plain WebView, so
+    // download the file instead — the phone's own Word/Docs app (or the
+    // browser's download manager) takes over from there.
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('fetch failed: ' + res.status);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(objUrl), 4000);
+    }catch(err){
+      console.error(err);
+      alert(t.downloadError);
+    }
+    return;
+  }
+
   const returnScript = makeReturnScript();
   try{
     if(file.type === 'html'){
