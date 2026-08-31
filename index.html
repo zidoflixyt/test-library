@@ -664,6 +664,7 @@ let cachedSubjects = [];   // [{ id, name, files: [{id,name,modifiedTime}] }]
 let currentMode = 'test';  // 'test' or 'study' — a filter/toggle now, not a nav level
 let currentSubject = null; // null => showing the subject list
 let searchTerm = '';
+let exitConfirmed = false; // true while the popstate triggered by "Exit app" is in flight
 
 const ICONS = {
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
@@ -794,12 +795,21 @@ function hideExitDialog(){ document.getElementById('exitOverlay').classList.remo
 document.getElementById('exitStayBtn').addEventListener('click', hideExitDialog);
 document.getElementById('exitLeaveBtn').addEventListener('click', function(){
   hideExitDialog();
-  // Best-effort: let the back navigation actually go through now, so a
-  // WebView wrapper that checks canGoBack()/goBack() natively will close
-  // the app. Some app-builder WebViews may still need one more physical
-  // back press to fully exit — if your app builder (webintoapp/Appilix)
-  // has a built-in "confirm before exit" dashboard setting, turning that
-  // on too is more reliable than this in-page trick alone.
+  // Flag this so the popstate handler below (which normally re-shows the
+  // exit dialog whenever it sees a back-navigation at the true root) lets
+  // THIS particular back-navigation through instead of intercepting it —
+  // otherwise the guard state gets restored and the dialog just reopens,
+  // which is why "Exit app" previously looked like it did nothing.
+  exitConfirmed = true;
+  // Best-effort: try closing the tab/webview outright first (works in some
+  // app-builder WebViews and PWA contexts that allow script-closing)...
+  try{ window.close(); }catch(e){}
+  // ...then let the back navigation actually go through, so a WebView
+  // wrapper that checks canGoBack()/goBack() natively will close the app.
+  // Some app-builder WebViews may still need one more physical back press
+  // to fully exit — if your app builder (webintoapp/Appilix) has a
+  // built-in "confirm before exit" dashboard setting, turning that on too
+  // is more reliable than this in-page trick alone.
   history.back();
 });
 
@@ -822,6 +832,13 @@ function handleBackPress(){
 }
 
 window.addEventListener('popstate', function(){
+  if(exitConfirmed){
+    // This popstate is the one WE triggered from the "Exit app" button —
+    // don't re-show the dialog and don't restore the guard state, or the
+    // user would never actually get to leave.
+    exitConfirmed = false;
+    return;
+  }
   if(!handleBackPress()) return;
   if(!searchTerm && !currentSubject){
     // Restore the guard state so the NEXT back press lands here again
@@ -1158,21 +1175,44 @@ async function openFile(file){
       if(!res.ok) throw new Error('fetch failed: ' + res.status);
       const arrayBuffer = await res.arrayBuffer();
       const result = await mammoth.convertToHtml({ arrayBuffer });
+      const styledHtml = styleDocxContent(result.value);
       document.open();
       document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
         <title>${escapeHtml(file.name)}</title>
         <style>
           body{ margin:0; background:#0b0c17; color:#eceefb; font-family:'Poppins',sans-serif; line-height:1.7; }
           .docx-wrap{ max-width:720px; margin:0 auto; padding:26px 20px 60px; }
-          h1,h2,h3{ font-family:'Poppins',sans-serif; background:linear-gradient(90deg,#8b5cf6,#4f7df3); -webkit-background-clip:text; background-clip:text; color:transparent; line-height:1.35; }
-          strong,b{ color:#fbbf24; }
-          em,i{ color:#9c9dc4; }
+
+          /* Main title(s) — warm gold-to-orange, the "hero" colour of the page */
+          h1{ font-family:'Poppins',sans-serif; font-weight:800; background:linear-gradient(90deg,#fde68a,#fbbf24,#fb923c); -webkit-background-clip:text; background-clip:text; color:transparent; line-height:1.32; }
+          /* Secondary headings — cool violet-to-blue, for contrast against h1 */
+          h2{ font-family:'Poppins',sans-serif; font-weight:800; background:linear-gradient(90deg,#a78bfa,#60a5fa); -webkit-background-clip:text; background-clip:text; color:transparent; line-height:1.32; }
+          /* Minor headings — solid teal, uppercase, tighter tracking */
+          h3,h4{ font-family:'Poppins',sans-serif; color:#5eead4; font-weight:700; text-transform:uppercase; letter-spacing:.6px; line-height:1.35; }
+
+          strong,b{ color:#fbbf24; }              /* default bold — warm gold */
+          em,i{ color:#c4b5fd; }                  /* default italic — soft lavender */
           a{ color:#7fadff; }
           img{ max-width:100%; height:auto; border-radius:8px; }
-          table{ border-collapse:collapse; width:100%; margin:14px 0; }
-          td,th{ border:1px solid #262842; padding:7px 10px; text-align:left; }
+          table{ border-collapse:collapse; width:100%; margin:14px 0; overflow:hidden; border-radius:10px; }
+          td,th{ border:1px solid #262842; padding:8px 11px; text-align:left; }
+          th{ background:rgba(139,92,246,.16); color:#c9bfff; font-weight:700; }
+          hr{ border:none; height:2px; margin:22px 0; background:linear-gradient(90deg,transparent,#8b5cf6,#4f7df3,transparent); border-radius:2px; opacity:.65; }
+          blockquote{ margin:14px 0; padding:10px 16px; border-left:3px solid #8b7bff; background:rgba(139,123,255,.08); border-radius:0 8px 8px 0; color:#cfd0e6; }
+          ul,ol{ padding-left:22px; }
+          li{ margin:4px 0; }
+          li::marker{ color:#5ec8ff; }
+
+          /* --- Exam-question layout: content-aware colour coding, added on
+             top of mammoth's plain output by styleDocxContent() below --- */
+          .doc-q{ color:#5ec8ff; font-weight:700; }                 /* "Q1. ..." question line */
+          .doc-cite, .doc-cite em, .doc-cite i{ color:#f0a1cf; font-style:italic; font-size:.92em; opacity:.95; }  /* "[SSC CGL 2022 ...]" source tag */
+          .doc-correct, .doc-correct strong, .doc-correct b{ color:#4ade80; }
+          .doc-correct{ display:inline-block; font-weight:700; background:rgba(74,222,128,.12); border:1px solid rgba(74,222,128,.3); padding:6px 14px; border-radius:999px; margin:6px 0; }
+          .doc-explain-label{ display:inline-block; color:#fbbf24; font-weight:800; text-transform:uppercase; letter-spacing:1.6px; font-size:.85em; padding-bottom:3px; margin:10px 0 2px; border-bottom:2px solid rgba(251,191,36,.35); }
+          .doc-opt-label{ color:#5ec8ff; font-weight:800; }         /* leading "A" / "B" / "C" / "D" label */
         </style></head>
-        <body><div class="docx-wrap">${result.value}</div>${returnScript}</body></html>`);
+        <body><div class="docx-wrap">${styledHtml}</div>${returnScript}</body></html>`);
       document.close();
     }catch(err){
       console.error(err);
@@ -1227,6 +1267,62 @@ function escapeHtml(str){
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+// Mammoth turns a .docx into plain semantic HTML (headings, <strong>,
+// <em>, lists, tables) but drops any per-run colour the original Word
+// file had. For the PYQ-style compilations in this library — question,
+// source citation, options, "Correct Answer:" line, "EXPLANATION" label,
+// lettered breakdown — that flattens everything bold to one colour. This
+// walks the converted HTML and tags the recognisable pieces with classes
+// (styled in the <style> block above) so the rendered doc reads with the
+// same kind of purposeful colour-coding as the original, without needing
+// the source .docx to carry any special formatting.
+function styleDocxContent(html){
+  const container = document.createElement('div');
+  container.innerHTML = html;
+
+  const blocks = container.querySelectorAll('p, li, td, th, h1, h2, h3, h4, h5, h6');
+  blocks.forEach(el=>{
+    const text = el.textContent.trim();
+    if(!text) return;
+
+    if(/^\[.*\]$/.test(text)){                       // "[SSC CGL 2022 Tier-1, ...]"
+      el.classList.add('doc-cite');
+      return;
+    }
+    if(/^correct answer\s*[:.]/i.test(text)){         // "Correct Answer: Option B ..."
+      el.classList.add('doc-correct');
+      return;
+    }
+    if(/^explanation$/i.test(text)){                  // standalone "EXPLANATION" label
+      el.classList.add('doc-explain-label');
+      return;
+    }
+    if(/^Q\d+[.)]/.test(text)){                        // "Q1. ..." / "Q23) ..."
+      el.classList.add('doc-q');
+      return;
+    }
+    // A single leading option/breakdown letter — "A. 44th Amendment..." or
+    // "A United States of America" (letter + punctuation, or letter then a
+    // capitalised word) — colour just that leading label, not the whole line.
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    const firstText = walker.nextNode();
+    if(firstText){
+      const t = firstText.textContent;
+      const m = t.match(/^(\s*[A-D])([.)]\s?|\s+(?=[A-Z]))/);
+      if(m){
+        el.classList.add('doc-opt');
+        const label = document.createElement('span');
+        label.className = 'doc-opt-label';
+        label.textContent = m[0];
+        const rest = document.createTextNode(t.slice(m[0].length));
+        firstText.replaceWith(label, rest);
+      }
+    }
+  });
+
+  return container.innerHTML;
 }
 
 document.getElementById('togglePass').addEventListener('click', function(){
