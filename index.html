@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
   :root{
     --font-display: 'Poppins', sans-serif;
@@ -803,8 +802,8 @@ document.getElementById('exitLeaveBtn').addEventListener('click', function(){
   history.back();
 });
 
-window.addEventListener('popstate', function(){
-  if(document.getElementById('app').style.display === 'none') return; // not logged in yet
+function handleBackPress(){
+  if(document.getElementById('app').style.display === 'none') return false; // not logged in yet
   if(searchTerm){
     searchTerm = '';
     document.getElementById('searchInput').value = '';
@@ -814,11 +813,39 @@ window.addEventListener('popstate', function(){
     render();
   } else {
     // Already at the true root (subject list) — this back press would
-    // otherwise leave the app, so intercept it: show the confirmation
-    // and restore the guard state to cancel the exit until the person
-    // decides.
-    history.pushState({ guard: true }, '', location.pathname);
+    // otherwise leave the app, so intercept it and show the confirmation
+    // instead.
     showExitDialog();
+  }
+  return true;
+}
+
+window.addEventListener('popstate', function(){
+  if(!handleBackPress()) return;
+  if(!searchTerm && !currentSubject){
+    // Restore the guard state so the NEXT back press lands here again
+    // instead of the browser thinking it already left this entry.
+    history.pushState({ guard: true }, '', location.pathname);
+  }
+});
+
+// Some WebView-based APK wrappers (WebIntoApp, Appilix, Median, Cordova-style
+// shells, etc.) forward the phone's hardware/gesture back press into the page
+// as a 'backbutton' custom event and/or a keydown with keyCode 4, instead of
+// letting it drive the browser's own history — so we listen for those too and
+// run the exact same step-back logic. If a wrapper does neither of these AND
+// doesn't call the WebView's own goBack()/canGoBack() on back press, this
+// cannot be intercepted from the page at all — that specific "override the
+// hardware back button" behaviour has to be turned on in the app-builder's
+// own dashboard settings (the same category of setting as the toolbar one).
+document.addEventListener('backbutton', function(e){
+  e.preventDefault();
+  handleBackPress();
+}, false);
+document.addEventListener('keydown', function(e){
+  if(e.keyCode === 4){
+    e.preventDefault();
+    handleBackPress();
   }
 });
 
@@ -1122,32 +1149,19 @@ async function openFile(file){
   const returnScript = makeReturnScript();
 
   if(file.type === 'docx'){
-    // Render the Word doc's content directly as HTML (via mammoth, loaded
-    // from the CDN in <head>) instead of downloading the .docx file — so
-    // it opens and reads like the rest of the library instead of dropping
-    // into the phone's file manager / Word app.
-    try{
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('fetch failed: ' + res.status);
-      const arrayBuffer = await res.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer });
-      document.open();
-      document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>${escapeHtml(file.name)}</title>
-        <style>
-          body{ margin:0; background:#faf2df; color:#3d2b1c; font-family:Georgia,'Libre Baskerville',serif; line-height:1.6; }
-          .docx-wrap{ max-width:720px; margin:0 auto; padding:28px 22px 60px; }
-          h1,h2,h3{ font-family:Georgia,serif; }
-          img{ max-width:100%; height:auto; }
-          table{ border-collapse:collapse; width:100%; margin:12px 0; }
-          td,th{ border:1px solid #d9c9a2; padding:6px 10px; text-align:left; }
-        </style></head>
-        <body><div class="docx-wrap">${result.value}</div>${returnScript}</body></html>`);
-      document.close();
-    }catch(err){
-      console.error(err);
-      alert(t.downloadError);
-    }
+    // Render the Word doc through Google Drive's own preview (the file is
+    // already shared "anyone with the link can view", which is what makes
+    // the plain API-key access work in the first place) instead of
+    // downloading it or re-parsing it ourselves — Drive's preview keeps the
+    // exact fonts/colors/headings from the original document, which a
+    // from-scratch HTML conversion can't reliably reproduce.
+    const previewUrl = `https://drive.google.com/file/d/${file.id}/preview`;
+    document.open();
+    document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>${escapeHtml(file.name)}</title>
+      <style>html,body{margin:0;height:100%;background:#0b0c17;} iframe{border:none;width:100%;height:100%;display:block;}</style></head>
+      <body><iframe src="${previewUrl}" allowfullscreen></iframe>${returnScript}</body></html>`);
+    document.close();
     return;
   }
 
