@@ -1281,20 +1281,68 @@ async function openFile(file){
       document.open();
       document.write(injected);
       document.close();
-    } else {
-      // PDFs and images: fetch as a blob and embed it inline on a fresh
-      // page (again, no top-level navigation to the API URL or to the
-      // blob itself — just an <embed>/<img> referencing the blob).
+    } else if(file.type === 'pdf'){
+      // Rendered as canvases via PDF.js instead of <embed type="application/pdf">.
+      // WebView-based APK shells (webintoapp/Appilix and similar) have no
+      // built-in PDF plugin, so an <embed>/<object> of that MIME type gets
+      // silently handed off to Android as a download instead of being shown
+      // in-page — that's the "content://...  [Open]" screen. Drawing every
+      // page onto a <canvas> ourselves never touches that native PDF-viewer
+      // handoff at all, so the file just opens directly.
       const res = await fetch(url);
       if(!res.ok) throw new Error('fetch failed: ' + res.status);
       const blob = await res.blob();
       const objUrl = URL.createObjectURL(blob);
       document.open();
-      if(file.type === 'pdf'){
-        document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><embed src="${objUrl}" type="application/pdf" style="width:100vw;height:100vh;border:none;"></body>${returnScript}</html>`);
-      } else {
-        document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#0b0e1c;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${objUrl}" style="max-width:100%;height:auto;"></body>${returnScript}</html>`);
-      }
+      document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>${escapeHtml(file.name)}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
+        <style>
+          html,body{ margin:0; background:#0b0c17; }
+          #pdf-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:12px 8px 50px; }
+          #pdf-wrap canvas{ max-width:100%; height:auto; display:block; box-shadow:0 6px 22px rgba(0,0,0,.5); border-radius:3px; }
+          #pdf-status{ color:#9c9dbd; text-align:center; padding:44px 20px; font-family:'Poppins',sans-serif; font-size:14px; }
+        </style></head>
+        <body>
+          <div id="pdf-status">Loading…</div>
+          <div id="pdf-wrap"></div>
+          <script>
+            pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            (async function(){
+              const statusEl = document.getElementById('pdf-status');
+              const wrap = document.getElementById('pdf-wrap');
+              try{
+                const pdf = await pdfjsLib.getDocument("${objUrl}").promise;
+                statusEl.remove();
+                const scale = Math.min(2.2, (window.devicePixelRatio || 1) * 1.4);
+                for(let i = 1; i <= pdf.numPages; i++){
+                  const page = await pdf.getPage(i);
+                  const viewport = page.getViewport({ scale });
+                  const canvas = document.createElement('canvas');
+                  canvas.width = viewport.width;
+                  canvas.height = viewport.height;
+                  canvas.style.width = Math.min(viewport.width / scale, window.innerWidth - 16) + 'px';
+                  wrap.appendChild(canvas);
+                  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                }
+              }catch(err){
+                console.error(err);
+                statusEl.textContent = 'Could not display this PDF.';
+              }
+            })();
+          <\/script>
+          ${returnScript}
+        </body></html>`);
+      document.close();
+    } else {
+      // Images: fetch as a blob and embed it inline on a fresh page (no
+      // top-level navigation to the API URL or to the blob itself).
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('fetch failed: ' + res.status);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      document.open();
+      document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#0b0e1c;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${objUrl}" style="max-width:100%;height:auto;"></body>${returnScript}</html>`);
       document.close();
     }
   }catch(err){
