@@ -165,21 +165,26 @@
     cursor:pointer; padding:0; font-family: var(--font-body);
   }
 
-  /* ---------- Test / Study mode toggle ---------- */
+  /* ---------- Test / Study / Video / PDF mode toggle ---------- */
   .mode-toggle{
-    display:grid; grid-template-columns: 1fr 1fr; background: var(--search-bg);
-    border:1px solid var(--panel-line); border-radius: 20px;
-    padding:5px; margin-bottom:14px; gap:4px;
+    display:grid; grid-template-columns: repeat(4, 1fr); background: var(--search-bg);
+    border:1px solid var(--panel-line); border-radius: 18px;
+    padding:6px; margin-bottom:14px; gap:5px;
   }
   .mode-toggle button{
-    display:flex; align-items:center; justify-content:center; gap:7px;
-    border:none; background:transparent; color: var(--ink-muted); padding:11px 10px;
-    border-radius:16px; font-size:13.5px; font-weight:600; cursor:pointer;
-    transition: all .18s ease; font-family: var(--font-body);
+    position:relative;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+    border:none; background:transparent; color: var(--ink-muted); padding:11px 4px 9px;
+    border-radius:13px; font-size:11px; font-weight:600; cursor:pointer;
+    transition: transform .15s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
+    font-family: var(--font-body); letter-spacing:.1px;
   }
-  .mode-toggle button .icon{ width:16px; height:16px; }
+  .mode-toggle button .icon{ width:19px; height:19px; transition: transform .18s ease; }
+  .mode-toggle button:active{ transform: scale(.94); }
   .mode-toggle button.active{ background: var(--grad); color:#fff; font-weight:700;
-    box-shadow: 0 8px 18px -8px rgba(107,92,240,.6); }
+    box-shadow: 0 8px 16px -8px rgba(107,92,240,.65); }
+  .mode-toggle button.active .icon{ transform: translateY(-1px) scale(1.05); }
+  [data-theme="dark"] .mode-toggle{ background: var(--panel); }
 
   /* ---------- Search ---------- */
   .wrap{ max-width: 640px; margin: 0 auto; padding: 16px 20px 60px; }
@@ -1255,8 +1260,195 @@ async function openFile(file){
     // sends Range requests against it) instead of being fetched as a full
     // blob first — downloading a whole video before playback would be slow
     // and wasteful, especially on mobile data.
+    //
+    // Custom controls (no native `controls` attribute) so the browser's
+    // built-in "Download" menu item never appears. `controlsList` /
+    // `disablePictureInPicture` are kept as a best-effort belt-and-braces
+    // measure too. A quality button (360p/720p/1080p) is included; since
+    // Drive's API only exposes one file per video, all three currently
+    // point at the same source — wire `qualities` up to real per-resolution
+    // URLs later (e.g. separate uploaded files per resolution) to make the
+    // switch actually change the stream.
     document.open();
-    document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;"><video src="${url}" controls playsinline autoplay style="max-width:100%;max-height:100vh;background:#000;"></video>${returnScript}</body></html>`);
+    document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>${escapeHtml(file.name)}</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;}
+  #stage{position:relative;width:100%;height:100vh;background:#000;overflow:hidden;}
+  video{width:100%;height:100%;background:#000;display:block;object-fit:contain;}
+  #tap{position:absolute;inset:0;}
+  #center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;
+    border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .2s;pointer-events:none;}
+  #center.show{opacity:1;}
+  #center svg{width:26px;height:26px;fill:#fff;}
+  #topbar{position:absolute;top:0;left:0;right:0;padding:14px 16px 34px;
+    background:linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,0));
+    font-family:'Poppins',sans-serif;color:#fff;font-size:13px;font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .25s;}
+  #topbar.hide{opacity:0;pointer-events:none;}
+  #bar{position:absolute;left:0;right:0;bottom:0;padding:6px 12px 16px;
+    background:linear-gradient(to top, rgba(0,0,0,.88), rgba(0,0,0,0));
+    display:flex;flex-direction:column;gap:6px;transition:opacity .25s;font-family:'Poppins',sans-serif;}
+  #bar.hide{opacity:0;pointer-events:none;}
+  #seekRow{display:flex;align-items:center;gap:9px;}
+  #time{color:#fff;font-size:11px;min-width:76px;text-align:center;font-variant-numeric:tabular-nums;}
+  #seek{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;
+    background:rgba(255,255,255,.3);outline:none;margin:0;}
+  #seek::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#8b7bff;}
+  #seek::-moz-range-thumb{width:13px;height:13px;border:none;border-radius:50%;background:#8b7bff;}
+  #btnRow{display:flex;align-items:center;gap:10px;}
+  #btnRow button{background:none;border:none;padding:6px;margin:0;cursor:pointer;color:#fff;
+    display:flex;align-items:center;justify-content:center;}
+  #btnRow svg{width:21px;height:21px;fill:#fff;}
+  .spacer{flex:1;}
+  #qualityBtn{font-size:11.5px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;
+    border:1px solid rgba(255,255,255,.4)!important;border-radius:8px;padding:5px 9px!important;}
+  #qMenu{position:absolute;right:12px;bottom:60px;background:#181828;border:1px solid rgba(255,255,255,.14);
+    border-radius:12px;overflow:hidden;display:none;min-width:112px;box-shadow:0 12px 32px rgba(0,0,0,.55);z-index:5;}
+  #qMenu.open{display:block;}
+  #qMenu button{display:block;width:100%;text-align:left;background:none;border:none;color:#e7e7f4;
+    padding:11px 15px;font-size:13px;font-family:'Poppins',sans-serif;cursor:pointer;}
+  #qMenu button.active{color:#a996ff;font-weight:700;}
+  #qMenu button:active{background:rgba(255,255,255,.08);}
+</style></head>
+<body>
+<div id="stage">
+  <video id="vid" src="${url}" playsinline autoplay controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture disableRemotePlayback></video>
+  <div id="topbar">${escapeHtml(file.name)}</div>
+  <div id="tap"></div>
+  <div id="center"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+  <div id="qMenu">
+    <button data-q="1080">1080p</button>
+    <button data-q="720" class="active">720p</button>
+    <button data-q="360">360p</button>
+  </div>
+  <div id="bar">
+    <div id="seekRow">
+      <span id="time">0:00 / 0:00</span>
+      <input id="seek" type="range" min="0" max="100" value="0" step="0.1">
+    </div>
+    <div id="btnRow">
+      <button id="playBtn"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+      <button id="muteBtn"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg></button>
+      <div class="spacer"></div>
+      <button id="qualityBtn">720p</button>
+      <button id="fsBtn"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var v = document.getElementById('vid');
+  var stage = document.getElementById('stage');
+  var bar = document.getElementById('bar');
+  var topbar = document.getElementById('topbar');
+  var playBtn = document.getElementById('playBtn');
+  var muteBtn = document.getElementById('muteBtn');
+  var seek = document.getElementById('seek');
+  var timeEl = document.getElementById('time');
+  var center = document.getElementById('center');
+  var qualityBtn = document.getElementById('qualityBtn');
+  var qMenu = document.getElementById('qMenu');
+  var fsBtn = document.getElementById('fsBtn');
+  var srcUrl = "${url}";
+  // All three currently resolve to the same Drive source — see the note
+  // above the document.write() call in the app for how to make this real.
+  var qualities = { "1080": srcUrl, "720": srcUrl, "360": srcUrl };
+
+  function fmt(s){
+    if(!isFinite(s)) return "0:00";
+    var m = Math.floor(s/60), sec = Math.floor(s%60);
+    return m + ":" + (sec<10?"0":"") + sec;
+  }
+  function updateTime(){
+    timeEl.textContent = fmt(v.currentTime) + " / " + fmt(v.duration);
+    if(v.duration) seek.value = (v.currentTime / v.duration) * 100;
+  }
+  v.addEventListener('timeupdate', updateTime);
+  v.addEventListener('loadedmetadata', updateTime);
+  seek.addEventListener('input', function(){
+    if(v.duration) v.currentTime = (seek.value/100) * v.duration;
+  });
+
+  function setPlayIcon(playing){
+    playBtn.innerHTML = playing
+      ? '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  }
+  function togglePlay(){ if(v.paused){ v.play(); } else { v.pause(); } }
+  playBtn.addEventListener('click', togglePlay);
+  v.addEventListener('play', function(){ setPlayIcon(true); });
+  v.addEventListener('pause', function(){ setPlayIcon(false); });
+
+  var tapTimer = null;
+  document.getElementById('tap').addEventListener('click', function(){
+    togglePlay();
+    center.classList.add('show');
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(function(){ center.classList.remove('show'); }, 450);
+  });
+
+  var hideTimer = null;
+  function showBar(){
+    bar.classList.remove('hide'); topbar.classList.remove('hide');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function(){
+      if(!v.paused){ bar.classList.add('hide'); topbar.classList.add('hide'); }
+    }, 2800);
+  }
+  stage.addEventListener('click', showBar);
+  v.addEventListener('play', showBar);
+  showBar();
+
+  var muted = false;
+  muteBtn.addEventListener('click', function(){
+    muted = !muted;
+    v.muted = muted;
+    muteBtn.innerHTML = muted
+      ? '<svg viewBox="0 0 24 24"><path d="M16.5 12L20 8.5 18.6 7 15 10.5 11.5 7 10 8.5 13.5 12 10 15.5 11.5 17 15 13.5 18.6 17 20 15.5z"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg>';
+  });
+
+  qualityBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    qMenu.classList.toggle('open');
+  });
+  document.body.addEventListener('click', function(){ qMenu.classList.remove('open'); });
+  qMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+
+  Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(btn){
+    btn.addEventListener('click', function(){
+      var q = btn.getAttribute('data-q');
+      var newSrc = qualities[q] || srcUrl;
+      var wasPlaying = !v.paused;
+      var t = v.currentTime;
+      if(v.src !== newSrc){
+        v.src = newSrc;
+        v.currentTime = t;
+        if(wasPlaying) v.play();
+      }
+      qualityBtn.textContent = q + 'p';
+      Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      qMenu.classList.remove('open');
+    });
+  });
+
+  fsBtn.addEventListener('click', function(){
+    if(!document.fullscreenElement){
+      (stage.requestFullscreen || stage.webkitRequestFullscreen || function(){}).call(stage);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+  });
+
+  v.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+})();
+<\/script>
+${returnScript}
+</body></html>`);
     document.close();
     return;
   }
