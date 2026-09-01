@@ -1450,35 +1450,97 @@ async function openFile(file){
     tapTimer = setTimeout(function(){ center.classList.remove('show'); }, 450);
   });
 
-  // Left zone: tap = rewind 10s.
+  // Left zone: double tap = rewind 10s (single tap does nothing).
+  var leftTapCount = 0, leftTapTimer = null;
   tapLeft.addEventListener('click', function(){
-    if(v.duration) v.currentTime = Math.max(0, v.currentTime - 10);
-    flashEl(seekIndL);
+    leftTapCount++;
+    if(leftTapCount === 1){
+      clearTimeout(leftTapTimer);
+      leftTapTimer = setTimeout(function(){ leftTapCount = 0; }, 300);
+    } else if(leftTapCount === 2){
+      clearTimeout(leftTapTimer);
+      leftTapCount = 0;
+      if(v.duration) v.currentTime = Math.max(0, v.currentTime - 10);
+      flashEl(seekIndL);
+    }
   });
 
   // Right zone: tap = forward 10s. Press-and-hold = 2x playback (YouTube style).
+  // Hold + drag down = lock 2x speed (stays after releasing finger).
+  // Hold again (while locked) = unlock back to normal speed.
   var holdTimer = null, isHolding = false, rightPressed = false;
-  tapRight.addEventListener('pointerdown', function(){
+  var speedLocked = false, draggedToLock = false, rightStartY = 0;
+  var ICON_FASTFWD = '<path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/>';
+  var ICON_LOCK = '<path d="M12 17a2 2 0 0 0 2-2 2 2 0 0 0-2-2 2 2 0 0 0-2 2 2 2 0 0 0 2 2zm6-9h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM8.9 6a3.1 3.1 0 0 1 6.2 0v2H8.9V6z"/>';
+  function setBadgeState(state){
+    if(state === 'hold'){
+      speedBadge.innerHTML = '<svg viewBox="0 0 24 24">'+ICON_FASTFWD+'</svg><span>2x speed</span>';
+    } else if(state === 'lockHint'){
+      speedBadge.innerHTML = '<svg viewBox="0 0 24 24">'+ICON_FASTFWD+'</svg><span>Release to lock 2x</span>';
+    } else if(state === 'locked'){
+      speedBadge.innerHTML = '<svg viewBox="0 0 24 24">'+ICON_LOCK+'</svg><span>2x locked · hold to undo</span>';
+    }
+  }
+  tapRight.addEventListener('pointerdown', function(e){
     rightPressed = true;
     isHolding = false;
+    draggedToLock = false;
+    rightStartY = e.clientY;
+    try{ tapRight.setPointerCapture(e.pointerId); }catch(err){}
     clearTimeout(holdTimer);
     holdTimer = setTimeout(function(){
       isHolding = true;
-      v.playbackRate = 2;
-      speedBadge.classList.add('show');
+      if(!speedLocked){
+        v.playbackRate = 2;
+        setBadgeState('hold');
+        speedBadge.classList.add('show');
+      }
     }, 500);
   });
+  tapRight.addEventListener('pointermove', function(e){
+    if(!rightPressed || !isHolding || speedLocked) return;
+    var dy = e.clientY - rightStartY;
+    if(dy > 40 && !draggedToLock){
+      draggedToLock = true;
+      setBadgeState('lockHint');
+    } else if(dy <= 40 && draggedToLock){
+      draggedToLock = false;
+      setBadgeState('hold');
+    }
+  });
+  var rightTapCount = 0, rightTapTimer = null;
   function endRightPress(){
     if(!rightPressed) return;
     rightPressed = false;
     clearTimeout(holdTimer);
     if(isHolding){
-      v.playbackRate = normalRate;
-      speedBadge.classList.remove('show');
+      if(speedLocked){
+        // A fresh hold-and-release while locked toggles it back off.
+        v.playbackRate = normalRate;
+        speedLocked = false;
+        speedBadge.classList.remove('show');
+      } else if(draggedToLock){
+        speedLocked = true;
+        setBadgeState('locked');
+        // Badge stays visible — speed remains 2x even after releasing.
+      } else {
+        v.playbackRate = normalRate;
+        speedBadge.classList.remove('show');
+      }
       isHolding = false;
+      draggedToLock = false;
     } else {
-      if(v.duration) v.currentTime = Math.min(v.duration, v.currentTime + 10);
-      flashEl(seekIndR);
+      // Double tap = forward 10s (single tap does nothing). Works even while locked.
+      rightTapCount++;
+      if(rightTapCount === 1){
+        clearTimeout(rightTapTimer);
+        rightTapTimer = setTimeout(function(){ rightTapCount = 0; }, 300);
+      } else if(rightTapCount === 2){
+        clearTimeout(rightTapTimer);
+        rightTapCount = 0;
+        if(v.duration) v.currentTime = Math.min(v.duration, v.currentTime + 10);
+        flashEl(seekIndR);
+      }
     }
   }
   tapRight.addEventListener('pointerup', endRightPress);
