@@ -1277,12 +1277,28 @@ async function openFile(file){
   html,body{margin:0;height:100%;background:#000;overflow:hidden;}
   #stage{position:relative;width:100%;height:100vh;background:#000;overflow:hidden;}
   video{width:100%;height:100%;background:#000;display:block;object-fit:contain;}
-  #tap{position:absolute;inset:0;}
+  .tapzone{position:absolute;top:0;bottom:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+  #tapLeft{left:0;width:30%;}
+  #tapCenter{left:30%;width:40%;}
+  #tapRight{right:0;width:30%;}
   #center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;
     border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;
     opacity:0;transition:opacity .2s;pointer-events:none;}
   #center.show{opacity:1;}
   #center svg{width:26px;height:26px;fill:#fff;}
+  .seek-ind{position:absolute;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;
+    align-items:center;gap:3px;color:#fff;font-family:'Poppins',sans-serif;font-size:12px;font-weight:700;
+    opacity:0;transition:opacity .2s;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,.6);}
+  .seek-ind.left{left:15%;}
+  .seek-ind.right{right:15%;}
+  .seek-ind.show{opacity:1;}
+  .seek-ind svg{width:32px;height:32px;fill:#fff;}
+  #speedBadge{position:absolute;top:14%;left:50%;transform:translate(-50%,0);background:rgba(0,0,0,.65);
+    color:#fff;font-family:'Poppins',sans-serif;font-weight:700;font-size:13px;padding:8px 16px;
+    border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;display:flex;
+    align-items:center;gap:6px;}
+  #speedBadge.show{opacity:1;}
+  #speedBadge svg{width:16px;height:16px;fill:#fff;}
   #topbar{position:absolute;top:0;left:0;right:0;padding:14px 16px 34px;
     background:linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,0));
     font-family:'Poppins',sans-serif;color:#fff;font-size:13px;font-weight:600;
@@ -1312,17 +1328,43 @@ async function openFile(file){
     padding:11px 15px;font-size:13px;font-family:'Poppins',sans-serif;cursor:pointer;}
   #qMenu button.active{color:#a996ff;font-weight:700;}
   #qMenu button:active{background:rgba(255,255,255,.08);}
+  #speedBtn{font-size:11.5px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;
+    border:1px solid rgba(255,255,255,.4)!important;border-radius:8px;padding:5px 9px!important;}
+  #speedMenu{position:absolute;right:12px;bottom:60px;background:#181828;border:1px solid rgba(255,255,255,.14);
+    border-radius:12px;overflow:hidden;display:none;min-width:112px;max-height:236px;overflow-y:auto;
+    box-shadow:0 12px 32px rgba(0,0,0,.55);z-index:5;}
+  #speedMenu.open{display:block;}
+  #speedMenu button{display:block;width:100%;text-align:left;background:none;border:none;color:#e7e7f4;
+    padding:11px 15px;font-size:13px;font-family:'Poppins',sans-serif;cursor:pointer;}
+  #speedMenu button.active{color:#a996ff;font-weight:700;}
+  #speedMenu button:active{background:rgba(255,255,255,.08);}
 </style></head>
 <body>
 <div id="stage">
   <video id="vid" src="${url}" playsinline autoplay controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture disableRemotePlayback></video>
   <div id="topbar">${escapeHtml(file.name)}</div>
-  <div id="tap"></div>
+  <div id="tapLeft" class="tapzone"></div>
+  <div id="tapCenter" class="tapzone"></div>
+  <div id="tapRight" class="tapzone"></div>
   <div id="center"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+  <div id="seekIndL" class="seek-ind left"><svg viewBox="0 0 24 24"><path d="M11.5 12L18 5.5v13zM4.5 12L11 5.5v13z"/></svg><span>10</span></div>
+  <div id="seekIndR" class="seek-ind right"><svg viewBox="0 0 24 24"><path d="M12.5 12L6 5.5v13zM19.5 12L13 5.5v13z"/></svg><span>10</span></div>
+  <div id="speedBadge"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>2x speed</span></div>
   <div id="qMenu">
     <button data-q="1080">1080p</button>
     <button data-q="720" class="active">720p</button>
     <button data-q="360">360p</button>
+  </div>
+  <div id="speedMenu">
+    <button data-r="1" class="active">Normal</button>
+    <button data-r="1.25">1.25x</button>
+    <button data-r="1.5">1.5x</button>
+    <button data-r="1.75">1.75x</button>
+    <button data-r="2">2x</button>
+    <button data-r="2.25">2.25x</button>
+    <button data-r="2.5">2.5x</button>
+    <button data-r="2.75">2.75x</button>
+    <button data-r="3">3x</button>
   </div>
   <div id="bar">
     <div id="seekRow">
@@ -1334,6 +1376,7 @@ async function openFile(file){
       <button id="muteBtn"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg></button>
       <div class="spacer"></div>
       <button id="qualityBtn">720p</button>
+      <button id="speedBtn">Normal</button>
       <button id="fsBtn"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
     </div>
   </div>
@@ -1351,6 +1394,8 @@ async function openFile(file){
   var center = document.getElementById('center');
   var qualityBtn = document.getElementById('qualityBtn');
   var qMenu = document.getElementById('qMenu');
+  var speedBtn = document.getElementById('speedBtn');
+  var speedMenu = document.getElementById('speedMenu');
   var fsBtn = document.getElementById('fsBtn');
   var srcUrl = "${url}";
   // All three currently resolve to the same Drive source — see the note
@@ -1382,13 +1427,63 @@ async function openFile(file){
   v.addEventListener('play', function(){ setPlayIcon(true); });
   v.addEventListener('pause', function(){ setPlayIcon(false); });
 
+  var tapLeft = document.getElementById('tapLeft');
+  var tapCenter = document.getElementById('tapCenter');
+  var tapRight = document.getElementById('tapRight');
+  var seekIndL = document.getElementById('seekIndL');
+  var seekIndR = document.getElementById('seekIndR');
+  var speedBadge = document.getElementById('speedBadge');
+  var normalRate = 1; // the speed picked from the speed menu ("normal" for hold-to-2x purposes)
+
+  function flashEl(el, ms){
+    el.classList.add('show');
+    clearTimeout(el._hideT);
+    el._hideT = setTimeout(function(){ el.classList.remove('show'); }, ms || 500);
+  }
+
+  // Centre zone: tap toggles play/pause (this is the ONLY zone that does).
   var tapTimer = null;
-  document.getElementById('tap').addEventListener('click', function(){
+  tapCenter.addEventListener('click', function(){
     togglePlay();
     center.classList.add('show');
     clearTimeout(tapTimer);
     tapTimer = setTimeout(function(){ center.classList.remove('show'); }, 450);
   });
+
+  // Left zone: tap = rewind 10s.
+  tapLeft.addEventListener('click', function(){
+    if(v.duration) v.currentTime = Math.max(0, v.currentTime - 10);
+    flashEl(seekIndL);
+  });
+
+  // Right zone: tap = forward 10s. Press-and-hold = 2x playback (YouTube style).
+  var holdTimer = null, isHolding = false, rightPressed = false;
+  tapRight.addEventListener('pointerdown', function(){
+    rightPressed = true;
+    isHolding = false;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(function(){
+      isHolding = true;
+      v.playbackRate = 2;
+      speedBadge.classList.add('show');
+    }, 500);
+  });
+  function endRightPress(){
+    if(!rightPressed) return;
+    rightPressed = false;
+    clearTimeout(holdTimer);
+    if(isHolding){
+      v.playbackRate = normalRate;
+      speedBadge.classList.remove('show');
+      isHolding = false;
+    } else {
+      if(v.duration) v.currentTime = Math.min(v.duration, v.currentTime + 10);
+      flashEl(seekIndR);
+    }
+  }
+  tapRight.addEventListener('pointerup', endRightPress);
+  tapRight.addEventListener('pointercancel', endRightPress);
+  tapRight.addEventListener('pointerleave', function(){ if(rightPressed) endRightPress(); });
 
   var hideTimer = null;
   function showBar(){
@@ -1413,10 +1508,33 @@ async function openFile(file){
 
   qualityBtn.addEventListener('click', function(e){
     e.stopPropagation();
+    speedMenu.classList.remove('open');
     qMenu.classList.toggle('open');
   });
-  document.body.addEventListener('click', function(){ qMenu.classList.remove('open'); });
+  document.body.addEventListener('click', function(){
+    qMenu.classList.remove('open');
+    speedMenu.classList.remove('open');
+  });
   qMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+
+  speedBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    qMenu.classList.remove('open');
+    speedMenu.classList.toggle('open');
+  });
+  speedMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+
+  Array.prototype.forEach.call(speedMenu.querySelectorAll('button'), function(btn){
+    btn.addEventListener('click', function(){
+      var r = parseFloat(btn.getAttribute('data-r'));
+      normalRate = r;
+      if(!isHolding){ v.playbackRate = r; }
+      speedBtn.textContent = (r === 1) ? 'Normal' : (r + 'x');
+      Array.prototype.forEach.call(speedMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      speedMenu.classList.remove('open');
+    });
+  });
 
   Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(btn){
     btn.addEventListener('click', function(){
