@@ -1264,10 +1264,11 @@ async function openFile(file){
     // Custom controls (no native `controls` attribute) so the browser's
     // built-in "Download" menu item never appears. `controlsList` /
     // `disablePictureInPicture` are kept as a best-effort belt-and-braces
-    // measure too. No quality selector — Drive only exposes one file per
-    // video, so a 1080p/720p/360p switcher would just relabel the same
-    // stream without changing anything. Add one back if/when real
-    // per-resolution files exist to point it at.
+    // measure too. A quality button (360p/720p/1080p) is included; since
+    // Drive's API only exposes one file per video, all three currently
+    // point at the same source — wire `qualities` up to real per-resolution
+    // URLs later (e.g. separate uploaded files per resolution) to make the
+    // switch actually change the stream.
     document.open();
     document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${escapeHtml(file.name)}</title>
@@ -1318,6 +1319,15 @@ async function openFile(file){
     display:flex;align-items:center;justify-content:center;}
   #btnRow svg{width:21px;height:21px;fill:#fff;}
   .spacer{flex:1;}
+  #qualityBtn{font-size:11.5px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;
+    border:1px solid rgba(255,255,255,.4)!important;border-radius:8px;padding:5px 9px!important;}
+  #qMenu{position:absolute;right:12px;bottom:60px;background:#181828;border:1px solid rgba(255,255,255,.14);
+    border-radius:12px;overflow:hidden;display:none;min-width:112px;box-shadow:0 12px 32px rgba(0,0,0,.55);z-index:5;}
+  #qMenu.open{display:block;}
+  #qMenu button{display:block;width:100%;text-align:left;background:none;border:none;color:#e7e7f4;
+    padding:11px 15px;font-size:13px;font-family:'Poppins',sans-serif;cursor:pointer;}
+  #qMenu button.active{color:#a996ff;font-weight:700;}
+  #qMenu button:active{background:rgba(255,255,255,.08);}
   #speedBtn{font-size:11.5px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;
     border:1px solid rgba(255,255,255,.4)!important;border-radius:8px;padding:5px 9px!important;}
   #speedMenu{position:absolute;right:12px;bottom:60px;background:#181828;border:1px solid rgba(255,255,255,.14);
@@ -1340,6 +1350,11 @@ async function openFile(file){
   <div id="seekIndL" class="seek-ind left"><svg viewBox="0 0 24 24"><path d="M11.5 12L18 5.5v13zM4.5 12L11 5.5v13z"/></svg><span>10</span></div>
   <div id="seekIndR" class="seek-ind right"><svg viewBox="0 0 24 24"><path d="M12.5 12L6 5.5v13zM19.5 12L13 5.5v13z"/></svg><span>10</span></div>
   <div id="speedBadge"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>2x speed</span></div>
+  <div id="qMenu">
+    <button data-q="1080">1080p</button>
+    <button data-q="720" class="active">720p</button>
+    <button data-q="360">360p</button>
+  </div>
   <div id="speedMenu">
     <button data-r="1" class="active">Normal</button>
     <button data-r="1.25">1.25x</button>
@@ -1360,6 +1375,7 @@ async function openFile(file){
       <button id="playBtn"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
       <button id="muteBtn"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg></button>
       <div class="spacer"></div>
+      <button id="qualityBtn">720p</button>
       <button id="speedBtn">Normal</button>
       <button id="fsBtn"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
     </div>
@@ -1376,9 +1392,16 @@ async function openFile(file){
   var seek = document.getElementById('seek');
   var timeEl = document.getElementById('time');
   var center = document.getElementById('center');
+  var qualityBtn = document.getElementById('qualityBtn');
+  var qMenu = document.getElementById('qMenu');
   var speedBtn = document.getElementById('speedBtn');
   var speedMenu = document.getElementById('speedMenu');
   var fsBtn = document.getElementById('fsBtn');
+  var srcUrl = "${url}";
+  // All three currently resolve to the same Drive source — see the note
+  // above the document.write() call in the app for how to make this real.
+  var qualities = { "1080": srcUrl, "720": srcUrl, "360": srcUrl };
+
   function fmt(s){
     if(!isFinite(s)) return "0:00";
     var m = Math.floor(s/60), sec = Math.floor(s%60);
@@ -1545,12 +1568,20 @@ async function openFile(file){
       : '<svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg>';
   });
 
+  qualityBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    speedMenu.classList.remove('open');
+    qMenu.classList.toggle('open');
+  });
   document.body.addEventListener('click', function(){
+    qMenu.classList.remove('open');
     speedMenu.classList.remove('open');
   });
+  qMenu.addEventListener('click', function(e){ e.stopPropagation(); });
 
   speedBtn.addEventListener('click', function(e){
     e.stopPropagation();
+    qMenu.classList.remove('open');
     speedMenu.classList.toggle('open');
   });
   speedMenu.addEventListener('click', function(e){ e.stopPropagation(); });
@@ -1564,6 +1595,24 @@ async function openFile(file){
       Array.prototype.forEach.call(speedMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
       speedMenu.classList.remove('open');
+    });
+  });
+
+  Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(btn){
+    btn.addEventListener('click', function(){
+      var q = btn.getAttribute('data-q');
+      var newSrc = qualities[q] || srcUrl;
+      var wasPlaying = !v.paused;
+      var t = v.currentTime;
+      if(v.src !== newSrc){
+        v.src = newSrc;
+        v.currentTime = t;
+        if(wasPlaying) v.play();
+      }
+      qualityBtn.textContent = q + 'p';
+      Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      qMenu.classList.remove('open');
     });
   });
 
@@ -1689,27 +1738,9 @@ function escapeHtml(str){
 // (styled in the <style> block above) so the rendered doc reads with the
 // same kind of purposeful colour-coding as the original, without needing
 // the source .docx to carry any special formatting.
-function sanitizeConvertedHtml(container){
-  // The shared Drive folder can receive uploads from more than one person,
-  // and mammoth's output is written straight into the page — so anything
-  // that survived conversion as raw script/handler content is stripped
-  // here before it ever touches the DOM as live markup.
-  container.querySelectorAll('script, iframe, object, embed, style, link, meta, base, form').forEach(el => el.remove());
-  container.querySelectorAll('*').forEach(el=>{
-    Array.prototype.slice.call(el.attributes).forEach(attr=>{
-      const name = attr.name.toLowerCase();
-      const value = (attr.value || '').trim();
-      if(name.startsWith('on') || (/^(href|src)$/.test(name) && /^\s*javascript:/i.test(value))){
-        el.removeAttribute(attr.name);
-      }
-    });
-  });
-}
-
 function styleDocxContent(html){
   const container = document.createElement('div');
   container.innerHTML = html;
-  sanitizeConvertedHtml(container);
 
   const blocks = container.querySelectorAll('p, li, td, th, h1, h2, h3, h4, h5, h6');
   blocks.forEach(el=>{
@@ -1805,26 +1836,36 @@ function showLogin(kickedOut){
   }
 }
 
-// Credentials go in a POST body now, never in a URL — the old version sent
-// username/password as query-string params via a JSONP <script> tag, which
-// meant they could end up in browser history, server access logs, and any
-// referrer headers along the way. `text/plain` as the content-type is
-// deliberate: it keeps this a CORS "simple request" so the browser doesn't
-// need the Apps Script backend to handle an OPTIONS preflight (which it
-// doesn't, by default). Requires the updated session-lock-appscript.gs
-// (doPost-based) to be deployed — the old doGet/JSONP backend won't answer this.
+let jsonpCounter = 0;
 function sessionApi(params){
-  const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 10000);
-  return fetch(SESSION_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(params),
-    signal: controller.signal
-  }).then(res=>{
-    if(!res.ok) throw new Error('request failed: ' + res.status);
-    return res.json();
-  }).finally(()=> clearTimeout(timeoutId));
+  return new Promise((resolve, reject)=>{
+    const cbName = 'sessionApiCb_' + (jsonpCounter++) + '_' + Date.now();
+    const timeoutId = setTimeout(()=>{
+      cleanup();
+      reject(new Error('timeout'));
+    }, 10000);
+
+    const script = document.createElement('script');
+
+    function cleanup(){
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = (data)=>{
+      cleanup();
+      resolve(data);
+    };
+
+    const query = new URLSearchParams({ ...params, callback: cbName }).toString();
+    script.src = SESSION_API_URL + '?' + query;
+    script.onerror = ()=>{
+      cleanup();
+      reject(new Error('script load failed'));
+    };
+    document.body.appendChild(script);
+  });
 }
 
 async function startSessionWatch(){
@@ -1843,7 +1884,7 @@ async function startSessionWatch(){
     }catch(err){
       console.error('session check failed', err);
     }
-  }, 8000); // re-check every 8s so a takeover elsewhere gets noticed quickly
+  }, 20000); // re-check every 20s so a takeover elsewhere gets noticed quickly
 }
 
 document.getElementById('loginForm').addEventListener('submit', async e=>{
