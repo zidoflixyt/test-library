@@ -977,6 +977,41 @@ async function collectFilesRecursively(folderId, subjectName, depth){
   return results;
 }
 
+// ---------- Video quality variants ----------
+// Google Drive stores exactly one file per video — there is no built-in
+// concept of "the same video at 360p/720p/1080p". Previously the quality
+// menu offered three options that all silently pointed at the same file,
+// so picking a different one visibly did nothing (that's the "quality
+// switching doesn't work" bug). This looks for genuine sibling files
+// instead: if a subject folder contains e.g. "Lecture 1.mp4",
+// "Lecture 1 720p.mp4" and "Lecture 1 360p.mp4" (any of _ - space as a
+// separator, "p" suffix optional), those are treated as real quality
+// variants of the same video and the menu is built only from what
+// actually exists. If a video has no such siblings, the quality button
+// is hidden instead of showing options that don't do anything real.
+function stripQualityToken(name){
+  return name.replace(/\.[^.]+$/, '')
+    .replace(/[\s_\-]*\(?\b(2160|1440|1080|720|480|360|240)p?\)?\s*$/i, '')
+    .trim().toLowerCase();
+}
+function detectQualityToken(name){
+  const m = name.match(/\b(2160|1440|1080|720|480|360|240)p?\b/i);
+  return m ? m[1] : null;
+}
+function findQualityVariants(file){
+  const base = stripQualityToken(file.name);
+  const variants = {};
+  cachedSubjects.forEach(s=>{
+    s.files.forEach(f=>{
+      if(f.type !== 'video') return;
+      if(stripQualityToken(f.name) !== base) return;
+      const q = detectQualityToken(f.name);
+      if(q) variants[q] = f.id;
+    });
+  });
+  return variants; // e.g. { "720": "<driveFileId>", "360": "<driveFileId>" }
+}
+
 function naturalSort(a, b){
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 }
@@ -1264,11 +1299,16 @@ async function openFile(file){
     // Custom controls (no native `controls` attribute) so the browser's
     // built-in "Download" menu item never appears. `controlsList` /
     // `disablePictureInPicture` are kept as a best-effort belt-and-braces
-    // measure too. A quality button (360p/720p/1080p) is included; since
-    // Drive's API only exposes one file per video, all three currently
-    // point at the same source — wire `qualities` up to real per-resolution
-    // URLs later (e.g. separate uploaded files per resolution) to make the
-    // switch actually change the stream.
+    // measure too. The quality button only appears when real sibling
+    // files for other resolutions exist (see findQualityVariants above) —
+    // see that comment for the file-naming convention that activates it.
+    const qualityVariants = findQualityVariants(file);
+    const currentQ = detectQualityToken(file.name);
+    if(currentQ) qualityVariants[currentQ] = file.id;
+    const qualityKeys = Object.keys(qualityVariants).sort((a,b)=> parseInt(b) - parseInt(a));
+    const qualityUrlMap = {};
+    qualityKeys.forEach(q=>{ qualityUrlMap[q] = `https://www.googleapis.com/drive/v3/files/${qualityVariants[q]}?alt=media&key=${API_KEY}`; });
+    const initialQ = currentQ && qualityUrlMap[currentQ] ? currentQ : (qualityKeys[0] || null);
     document.open();
     document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${escapeHtml(file.name)}</title>
@@ -1338,10 +1378,31 @@ async function openFile(file){
     padding:11px 15px;font-size:13px;font-family:'Poppins',sans-serif;cursor:pointer;}
   #speedMenu button.active{color:#a996ff;font-weight:700;}
   #speedMenu button:active{background:rgba(255,255,255,.08);}
+  /* Left-edge swipe-to-adjust volume indicator */
+  #volIndicator{position:absolute;top:50%;left:8%;transform:translateY(-50%);width:34px;
+    display:flex;flex-direction:column-reverse;align-items:center;gap:8px;opacity:0;
+    transition:opacity .15s;pointer-events:none;}
+  #volIndicator.show{opacity:1;}
+  #volTrack{width:5px;height:120px;border-radius:3px;background:rgba(255,255,255,.25);
+    display:flex;flex-direction:column-reverse;overflow:hidden;}
+  #volFill{width:100%;height:0%;background:#fff;border-radius:3px;}
+  #volIndicator svg{width:20px;height:20px;fill:#fff;flex-shrink:0;}
+  #volPct{color:#fff;font-family:'Poppins',sans-serif;font-size:11px;font-weight:700;
+    text-shadow:0 1px 4px rgba(0,0,0,.6);}
+  /* Silence fast-forward toggle */
+  #silenceBtn{font-size:11.5px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;
+    border:1px solid rgba(255,255,255,.4)!important;border-radius:8px;padding:5px 9px!important;
+    display:flex;align-items:center;gap:5px;}
+  #silenceBtn.active{background:rgba(139,123,255,.85);border-color:transparent!important;}
+  #silenceBtn svg{width:14px;height:14px;fill:#fff;}
+  #silenceHint{position:absolute;top:14%;left:50%;transform:translate(-50%,0);background:rgba(0,0,0,.65);
+    color:#fff;font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;padding:7px 14px;
+    border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;}
+  #silenceHint.show{opacity:1;}
 </style></head>
 <body>
 <div id="stage">
-  <video id="vid" src="${url}" playsinline autoplay controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture disableRemotePlayback></video>
+  <video id="vid" src="${qualityUrlMap[initialQ] || url}" crossorigin="anonymous" playsinline autoplay controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture disableRemotePlayback></video>
   <div id="topbar">${escapeHtml(file.name)}</div>
   <div id="tapLeft" class="tapzone"></div>
   <div id="tapCenter" class="tapzone"></div>
@@ -1350,11 +1411,13 @@ async function openFile(file){
   <div id="seekIndL" class="seek-ind left"><svg viewBox="0 0 24 24"><path d="M11.5 12L18 5.5v13zM4.5 12L11 5.5v13z"/></svg><span>10</span></div>
   <div id="seekIndR" class="seek-ind right"><svg viewBox="0 0 24 24"><path d="M12.5 12L6 5.5v13zM19.5 12L13 5.5v13z"/></svg><span>10</span></div>
   <div id="speedBadge"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>2x speed</span></div>
-  <div id="qMenu">
-    <button data-q="1080">1080p</button>
-    <button data-q="720" class="active">720p</button>
-    <button data-q="360">360p</button>
+  <div id="silenceHint">⏩ Skipping silence</div>
+  <div id="volIndicator">
+    <span id="volPct">100%</span>
+    <div id="volTrack"><div id="volFill"></div></div>
+    <svg id="volIcon" viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
   </div>
+  <div id="qMenu"></div>
   <div id="speedMenu">
     <button data-r="1" class="active">Normal</button>
     <button data-r="1.25">1.25x</button>
@@ -1375,7 +1438,8 @@ async function openFile(file){
       <button id="playBtn"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
       <button id="muteBtn"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg></button>
       <div class="spacer"></div>
-      <button id="qualityBtn">720p</button>
+      <button id="silenceBtn" title="Fast-forward during silence"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>Silence</span></button>
+      <button id="qualityBtn" style="display:none">Auto</button>
       <button id="speedBtn">Normal</button>
       <button id="fsBtn"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
     </div>
@@ -1397,10 +1461,19 @@ async function openFile(file){
   var speedBtn = document.getElementById('speedBtn');
   var speedMenu = document.getElementById('speedMenu');
   var fsBtn = document.getElementById('fsBtn');
+  var silenceBtn = document.getElementById('silenceBtn');
+  var silenceHint = document.getElementById('silenceHint');
+  var volIndicator = document.getElementById('volIndicator');
+  var volFill = document.getElementById('volFill');
+  var volPct = document.getElementById('volPct');
+  var volIcon = document.getElementById('volIcon');
   var srcUrl = "${url}";
-  // All three currently resolve to the same Drive source — see the note
-  // above the document.write() call in the app for how to make this real.
-  var qualities = { "1080": srcUrl, "720": srcUrl, "360": srcUrl };
+  // Real per-resolution files only — see findQualityVariants() in the main
+  // app for how these are detected from sibling filenames. Empty/one entry
+  // means this video genuinely only exists at one quality, so the button
+  // stays hidden instead of offering a fake choice.
+  var qualities = ${JSON.stringify(qualityUrlMap)};
+  var currentQuality = ${JSON.stringify(initialQ)};
 
   function fmt(s){
     if(!isFinite(s)) return "0:00";
@@ -1451,8 +1524,10 @@ async function openFile(file){
   });
 
   // Left zone: double tap = rewind 10s (single tap does nothing).
+  // Vertical drag = volume, swipe up to raise / down to lower — mirrors
+  // the right-zone hold-for-2x gesture so both edges feel consistent.
   var leftTapCount = 0, leftTapTimer = null;
-  tapLeft.addEventListener('click', function(){
+  function handleLeftTap(){
     leftTapCount++;
     if(leftTapCount === 1){
       clearTimeout(leftTapTimer);
@@ -1463,7 +1538,55 @@ async function openFile(file){
       if(v.duration) v.currentTime = Math.max(0, v.currentTime - 10);
       flashEl(seekIndL);
     }
+  }
+
+  function volIconFor(vol, isMuted){
+    if(isMuted || vol === 0) return '<path d="M16.5 12L20 8.5 18.6 7 15 10.5 11.5 7 10 8.5 13.5 12 10 15.5 11.5 17 15 13.5 18.6 17 20 15.5z"/>';
+    if(vol < 0.5) return '<path d="M5 9v6h4l5 5V4L9 9H5z"/>';
+    return '<path d="M5 9v6h4l5 5V4L9 9H5zm11.5 3A4.5 4.5 0 0 0 14 8.79v6.42A4.5 4.5 0 0 0 16.5 12z"/>';
+  }
+  function renderVolIndicator(vol, isMuted){
+    volFill.style.height = (Math.round(vol*100)) + '%';
+    volPct.textContent = isMuted ? 'Mute' : Math.round(vol*100) + '%';
+    volIcon.innerHTML = volIconFor(vol, isMuted);
+  }
+  var volHideT = null;
+  function showVolIndicator(){
+    volIndicator.classList.add('show');
+    clearTimeout(volHideT);
+    volHideT = setTimeout(function(){ volIndicator.classList.remove('show'); }, 700);
+  }
+
+  var leftPressed = false, leftStartY = 0, leftStartVolume = 1, isVolumeDragging = false;
+  tapLeft.addEventListener('pointerdown', function(e){
+    leftPressed = true;
+    isVolumeDragging = false;
+    leftStartY = e.clientY;
+    leftStartVolume = v.muted ? 0 : v.volume;
+    try{ tapLeft.setPointerCapture(e.pointerId); }catch(err){}
   });
+  tapLeft.addEventListener('pointermove', function(e){
+    if(!leftPressed) return;
+    var dy = leftStartY - e.clientY; // positive = finger moved up
+    if(!isVolumeDragging && Math.abs(dy) < 12) return; // ignore tiny jitter, let it stay a tap
+    isVolumeDragging = true;
+    var stageH = stage.clientHeight || window.innerHeight;
+    var newVol = Math.min(1, Math.max(0, leftStartVolume + dy / (stageH * 0.75)));
+    v.volume = newVol;
+    v.muted = newVol === 0;
+    muted = v.muted;
+    renderVolIndicator(newVol, v.muted);
+    showVolIndicator();
+  });
+  function endLeftPress(){
+    if(!leftPressed) return;
+    leftPressed = false;
+    if(!isVolumeDragging) handleLeftTap();
+    isVolumeDragging = false;
+  }
+  tapLeft.addEventListener('pointerup', endLeftPress);
+  tapLeft.addEventListener('pointercancel', endLeftPress);
+  tapLeft.addEventListener('pointerleave', function(){ if(leftPressed) endLeftPress(); });
 
   // Right zone: tap = forward 10s. Press-and-hold = 2x playback (YouTube style).
   // Hold + drag down = lock 2x speed (stays after releasing finger).
@@ -1598,23 +1721,34 @@ async function openFile(file){
     });
   });
 
-  Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(btn){
-    btn.addEventListener('click', function(){
-      var q = btn.getAttribute('data-q');
-      var newSrc = qualities[q] || srcUrl;
-      var wasPlaying = !v.paused;
-      var t = v.currentTime;
-      if(v.src !== newSrc){
-        v.src = newSrc;
-        v.currentTime = t;
-        if(wasPlaying) v.play();
-      }
-      qualityBtn.textContent = q + 'p';
-      Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
-      btn.classList.add('active');
-      qMenu.classList.remove('open');
+  var qKeys = Object.keys(qualities);
+  if(qKeys.length > 1){
+    qualityBtn.style.display = '';
+    qualityBtn.textContent = currentQuality ? currentQuality + 'p' : 'Auto';
+    qKeys.forEach(function(q){
+      var btn = document.createElement('button');
+      btn.textContent = q + 'p';
+      if(q === currentQuality) btn.classList.add('active');
+      btn.addEventListener('click', function(){
+        var newSrc = qualities[q];
+        var wasPlaying = !v.paused;
+        var t = v.currentTime;
+        if(v.src !== newSrc){
+          v.src = newSrc;
+          v.currentTime = t;
+          if(wasPlaying) v.play();
+        }
+        currentQuality = q;
+        qualityBtn.textContent = q + 'p';
+        Array.prototype.forEach.call(qMenu.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        qMenu.classList.remove('open');
+      });
+      qMenu.appendChild(btn);
     });
-  });
+  } else {
+    qualityBtn.style.display = 'none';
+  }
 
   fsBtn.addEventListener('click', function(){
     if(!document.fullscreenElement){
@@ -1625,6 +1759,92 @@ async function openFile(file){
   });
 
   v.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  // ---------- Fast-forward during silence ----------
+  // Same idea as the toggle in NewPipe: while ON, quiet stretches of the
+  // video are played back sped-up instead of at normal speed, and it drops
+  // back to normal the moment sound resumes. This analyses the actual
+  // audio level in real time (Web Audio API) rather than skipping blindly,
+  // so it still works on any video regardless of where the quiet parts are.
+  var silenceOn = false;
+  var audioCtx = null, analyser = null, sourceNode = null, silenceRAF = null;
+  var silenceData = null, silenceSince = null, inSilence = false;
+  var SILENCE_THRESHOLD = 0.02;   // RMS level below this counts as "quiet"
+  var SILENCE_HOLD_MS = 350;      // how long it must stay quiet before speeding up
+  var SILENCE_RATE = 4;           // playback rate used during a quiet stretch
+
+  function ensureAudioGraph(){
+    if(audioCtx) return true;
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+      sourceNode = audioCtx.createMediaElementSource(v);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      silenceData = new Uint8Array(analyser.fftSize);
+      sourceNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      return true;
+    }catch(err){
+      console.error('silence-skip: audio graph init failed', err);
+      audioCtx = null;
+      return false;
+    }
+  }
+
+  function activeNormalRate(){
+    return (isHolding && !speedLocked) ? 2 : normalRate;
+  }
+
+  function monitorSilence(){
+    if(!silenceOn || !analyser){ silenceRAF = null; return; }
+    analyser.getByteTimeDomainData(silenceData);
+    var sumSq = 0;
+    for(var i=0;i<silenceData.length;i++){
+      var val = (silenceData[i]-128)/128;
+      sumSq += val*val;
+    }
+    var rms = Math.sqrt(sumSq/silenceData.length);
+    var now = performance.now();
+    if(rms < SILENCE_THRESHOLD){
+      if(silenceSince === null) silenceSince = now;
+      if(!inSilence && (now - silenceSince) > SILENCE_HOLD_MS){
+        inSilence = true;
+        v.playbackRate = SILENCE_RATE;
+        silenceHint.classList.add('show');
+      }
+    } else {
+      silenceSince = null;
+      if(inSilence){
+        inSilence = false;
+        v.playbackRate = activeNormalRate();
+        silenceHint.classList.remove('show');
+      }
+    }
+    silenceRAF = requestAnimationFrame(monitorSilence);
+  }
+
+  silenceBtn.addEventListener('click', function(){
+    silenceOn = !silenceOn;
+    silenceBtn.classList.toggle('active', silenceOn);
+    if(silenceOn){
+      if(!ensureAudioGraph()){
+        silenceOn = false;
+        silenceBtn.classList.remove('active');
+        alert('Silence skip is not supported on this device or browser.');
+        return;
+      }
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      if(!silenceRAF) silenceRAF = requestAnimationFrame(monitorSilence);
+    } else {
+      if(inSilence){
+        inSilence = false;
+        v.playbackRate = activeNormalRate();
+        silenceHint.classList.remove('show');
+      }
+      silenceSince = null;
+    }
+  });
 })();
 <\/script>
 ${returnScript}
@@ -1943,15 +2163,33 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   const username = getStored(USER_KEY);
   if(!token || !username) return;
   if(!SESSION_API_URL || SESSION_API_URL.includes('PASTE_')){ return; }
+
+  // Show the app immediately from the cached session token instead of
+  // waiting for the network round-trip to confirm it first. This matters
+  // a lot because every video/PDF/test/doc viewer is opened via
+  // document.write() (needed for WebView-APK compatibility — see
+  // makeReturnScript()), which means pressing back from a viewer does a
+  // real full-page reload of index.html back to this exact spot. Waiting
+  // for sessionApi() before showing anything used to leave the blank
+  // login form visible for the whole round-trip on every single "back"
+  // press — that's the "back press sends me to the login page, then it
+  // reloads itself back home" behaviour. Showing the app straight away
+  // and validating quietly in the background removes that flash for the
+  // normal (still-logged-in) case, while still logging the user out if
+  // the token turns out to be invalid/taken over elsewhere.
+  showApp();
   try{
     const data = await sessionApi({ action: 'check', token, username });
-    if(data.valid){
-      showApp();
-    }else{
+    if(!data.valid){
       clearStored(TOKEN_KEY);
       clearStored(USER_KEY);
+      showLogin(true);
     }
   }catch(err){
+    // Network hiccup on the background check — keep the optimistic
+    // session alive rather than kicking the user out; startSessionWatch()
+    // (already running, started inside showApp()) will simply try again
+    // in 20s.
     console.error('session check failed', err);
   }
 })();
