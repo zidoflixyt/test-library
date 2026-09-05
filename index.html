@@ -1465,10 +1465,6 @@ async function openFile(file){
     display:flex;align-items:center;gap:5px;}
   #silenceBtn.active{background:rgba(139,123,255,.85);border-color:transparent!important;}
   #silenceBtn svg{width:14px;height:14px;fill:#fff;}
-  #silenceHint{position:absolute;top:14%;left:50%;transform:translate(-50%,0);background:rgba(0,0,0,.65);
-    color:#fff;font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;padding:7px 14px;
-    border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;}
-  #silenceHint.show{opacity:1;}
 </style></head>
 <body>
 <div id="stage">
@@ -1481,7 +1477,6 @@ async function openFile(file){
   <div id="seekIndL" class="seek-ind left"><svg viewBox="0 0 24 24"><path d="M11.5 12L18 5.5v13zM4.5 12L11 5.5v13z"/></svg><span>10</span></div>
   <div id="seekIndR" class="seek-ind right"><svg viewBox="0 0 24 24"><path d="M12.5 12L6 5.5v13zM19.5 12L13 5.5v13z"/></svg><span>10</span></div>
   <div id="speedBadge"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>2x speed</span></div>
-  <div id="silenceHint">⏩ Skipping silence</div>
   <div id="volIndicator">
     <span id="volPct">100%</span>
     <div id="volTrack"><div id="volFill"></div></div>
@@ -1532,7 +1527,6 @@ async function openFile(file){
   var speedMenu = document.getElementById('speedMenu');
   var fsBtn = document.getElementById('fsBtn');
   var silenceBtn = document.getElementById('silenceBtn');
-  var silenceHint = document.getElementById('silenceHint');
   var volIndicator = document.getElementById('volIndicator');
   var volFill = document.getElementById('volFill');
   var volPct = document.getElementById('volPct');
@@ -1617,21 +1611,20 @@ async function openFile(file){
   // accent colour keep climbing so it's still obvious how much boost is
   // active, same as MX Player's own indicator.
   var MAX_BOOST = 2;             // 200% ceiling
-  var NORMAL_SPAN_RATIO = 0.55;  // drag distance (of stage height) covering 0%..100%
-  var BOOST_SPAN_RATIO  = 0.75;  // additional drag distance covering 100%..200% (deliberately
-                                  // less sensitive than the normal range so boosting never
-                                  // happens by accident)
+  // Fixed PIXEL distances, not a fraction of screen height — a ratio of
+  // stage height meant a single swipe needed to cover most of the actual
+  // screen to reach 0% or 100%, which felt far too insensitive on tall
+  // phone screens. A fixed distance instead means one ordinary swipe (well
+  // short of edge-to-edge) always covers the full range, on any device.
+  var NORMAL_SPAN_PX = 260;  // one comfortable swipe = the complete 0%..100%
+  var BOOST_SPAN_PX  = 340;  // boosting past 100% deliberately needs a bit more drag
 
-  function volToPx(vol, stageH){
-    var normalSpan = stageH * NORMAL_SPAN_RATIO;
-    var boostSpan = stageH * BOOST_SPAN_RATIO;
-    return vol <= 1 ? vol * normalSpan : normalSpan + (vol - 1) * boostSpan;
+  function volToPx(vol){
+    return vol <= 1 ? vol * NORMAL_SPAN_PX : NORMAL_SPAN_PX + (vol - 1) * BOOST_SPAN_PX;
   }
-  function pxToVol(px, stageH){
-    var normalSpan = stageH * NORMAL_SPAN_RATIO;
-    var boostSpan = stageH * BOOST_SPAN_RATIO;
-    if(px <= normalSpan) return Math.max(0, px / normalSpan);
-    return Math.min(MAX_BOOST, 1 + (px - normalSpan) / boostSpan);
+  function pxToVol(px){
+    if(px <= NORMAL_SPAN_PX) return Math.max(0, px / NORMAL_SPAN_PX);
+    return Math.min(MAX_BOOST, 1 + (px - NORMAL_SPAN_PX) / BOOST_SPAN_PX);
   }
   function getEffectiveVolume(){
     return gainNode ? gainNode.gain.value : (v.muted ? 0 : v.volume);
@@ -1683,7 +1676,7 @@ async function openFile(file){
     leftPressed = true;
     isVolumeDragging = false;
     leftStartY = e.clientY;
-    leftStartPx = volToPx(getEffectiveVolume(), stage.clientHeight || window.innerHeight);
+    leftStartPx = volToPx(getEffectiveVolume());
     try{ tapLeft.setPointerCapture(e.pointerId); }catch(err){}
   });
   tapLeft.addEventListener('pointermove', function(e){
@@ -1691,8 +1684,7 @@ async function openFile(file){
     var dy = leftStartY - e.clientY; // positive = finger moved up
     if(!isVolumeDragging && Math.abs(dy) < 12) return; // ignore tiny jitter, let it stay a tap
     isVolumeDragging = true;
-    var stageH = stage.clientHeight || window.innerHeight;
-    var newVol = pxToVol(leftStartPx + dy, stageH);
+    var newVol = pxToVol(leftStartPx + dy);
     var applied = setEffectiveVolume(newVol);
     muted = (applied === 0);
     renderVolIndicator(applied, muted);
@@ -1897,14 +1889,24 @@ async function openFile(file){
   var silenceOn = false;
   var audioCtx = null, gainNode = null, analyser = null, sourceNode = null, silenceRAF = null;
   var silenceData = null, silenceSince = null, soundSince = null, inSilence = false;
-  var rmsHistory = [], RMS_SMOOTH_FRAMES = 4;      // short rolling average, damps single-frame spikes
-  var SILENCE_ENTER = 0.020;  // must stay below this level to start speeding up...
-  var SILENCE_EXIT  = 0.032;  // ...but only needs to rise above this (higher) level to stop —
-                               // that gap is hysteresis: it stops a level hovering right at one
-                               // fixed threshold from flickering rapidly in and out of "silence"
-  var SILENCE_ENTER_HOLD_MS = 300; // how long it must stay quiet before speeding up
-  var SILENCE_EXIT_HOLD_MS  = 90;  // brief confirm-hold before dropping back too, same reason
-  var SILENCE_RATE = 3;       // playback rate used during a quiet stretch (NewPipe-like, not jarring)
+  var rmsHistory = [], RMS_SMOOTH_FRAMES = 6;      // short rolling average, damps single-frame spikes
+  // Adaptive, not a fixed number: a fixed absolute RMS threshold works only
+  // for one particular mastering/recording loudness — a quietly-recorded
+  // video's actual dialogue can sit BELOW a threshold tuned for louder
+  // videos, which is exactly what was speeding up real speech. Instead we
+  // track this video's own recent "normal" loudness and only call it
+  // silence when the level drops well below that video's own baseline.
+  var ambientLevel = 0.05;              // running estimate of this video's normal (non-silent) loudness
+  var AMBIENT_SMOOTH = 0.985;           // how slowly the baseline adapts (slow = stable)
+  var SILENCE_ENTER_RATIO = 0.14;       // must drop below 14% of the video's own normal level...
+  var SILENCE_EXIT_RATIO  = 0.26;       // ...but only needs to climb back above 26% to stop —
+                                         // that gap is hysteresis, so a level hovering near one
+                                         // fixed line doesn't flicker in and out rapidly
+  var SILENCE_ABS_FLOOR = 0.006;        // true near-zero level, always treated as silence regardless of ratio
+  var SILENCE_ENTER_HOLD_MS = 450;      // must stay quiet this long before speeding up — comfortably
+                                         // longer than a normal breath/pause between sentences
+  var SILENCE_EXIT_HOLD_MS  = 120;      // brief confirm-hold before dropping back too
+  var SILENCE_RATE = 3;                 // playback rate used during a quiet stretch
 
   // Shared by both the silence-skip feature and the volume-boost feature
   // below — only ONE Web Audio graph can ever exist per <video> element
@@ -1973,16 +1975,27 @@ async function openFile(file){
     if(rmsHistory.length > RMS_SMOOTH_FRAMES) rmsHistory.shift();
     var avgRms = rmsHistory.reduce(function(a,b){ return a+b; }, 0) / rmsHistory.length;
 
+    // Keep learning what "normal" sounds like for THIS video, but only
+    // while it's actually talking/playing (not while already in a silent
+    // stretch) — otherwise a long silence would slowly drag the baseline
+    // down to near zero and the adaptive threshold would stop meaning
+    // anything.
+    if(!inSilence){
+      ambientLevel = ambientLevel * AMBIENT_SMOOTH + avgRms * (1 - AMBIENT_SMOOTH);
+    }
+
+    var enterLevel = Math.max(SILENCE_ABS_FLOOR, ambientLevel * SILENCE_ENTER_RATIO);
+    var exitLevel  = Math.max(SILENCE_ABS_FLOOR * 1.5, ambientLevel * SILENCE_EXIT_RATIO);
+
     var now = performance.now();
-    if(avgRms < SILENCE_ENTER){
+    if(avgRms < enterLevel){
       soundSince = null;
       if(silenceSince === null) silenceSince = now;
       if(!inSilence && (now - silenceSince) > SILENCE_ENTER_HOLD_MS){
         inSilence = true;
         v.playbackRate = SILENCE_RATE;
-        silenceHint.classList.add('show');
       }
-    } else if(avgRms > SILENCE_EXIT){
+    } else if(avgRms > exitLevel){
       silenceSince = null;
       if(inSilence){
         if(soundSince === null) soundSince = now;
@@ -1990,12 +2003,11 @@ async function openFile(file){
           inSilence = false;
           soundSince = null;
           v.playbackRate = activeNormalRate();
-          silenceHint.classList.remove('show');
         }
       }
     }
-    // Between SILENCE_ENTER and SILENCE_EXIT (the hysteresis gap) neither
-    // timer resets — the current state just holds steady until the level
+    // Between enterLevel and exitLevel (the hysteresis gap) neither timer
+    // resets — the current state just holds steady until the level
     // clearly commits to one side or the other.
     silenceRAF = requestAnimationFrame(monitorSilence);
   }
@@ -2011,13 +2023,12 @@ async function openFile(file){
         return;
       }
       if(audioCtx.state === 'suspended') audioCtx.resume();
-      rmsHistory = []; silenceSince = null; soundSince = null;
+      rmsHistory = []; silenceSince = null; soundSince = null; ambientLevel = 0.05;
       if(!silenceRAF) silenceRAF = requestAnimationFrame(monitorSilence);
     } else {
       if(inSilence){
         inSilence = false;
         v.playbackRate = activeNormalRate();
-        silenceHint.classList.remove('show');
       }
       silenceSince = null; soundSince = null;
     }
