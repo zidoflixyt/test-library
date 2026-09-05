@@ -1462,6 +1462,23 @@ async function openFile(file){
   #silenceBtn svg{width:14px;height:14px;fill:#fff;}
 </style></head>
 <body>
+<script>
+  // Temporary diagnostic: shows any JS error as an on-screen banner instead
+  // of failing completely silently (with no devtools available on a real
+  // phone, an uncaught error here otherwise looks identical to "nothing
+  // works" with zero clue why). Safe to remove later once things are
+  // confirmed stable.
+  window.addEventListener('error', function(e){
+    try{
+      var b = document.createElement('div');
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;'
+        + 'font:12px monospace;padding:8px 10px;z-index:999999;white-space:pre-wrap;'
+        + 'word-break:break-word;';
+      b.textContent = 'JS ERROR: ' + e.message + '  (line ' + e.lineno + ':' + e.colno + ')';
+      document.body.appendChild(b);
+    }catch(err){}
+  });
+<\/script>
 <div id="stage">
   <video id="vid" src="${qualityUrlMap[initialQ] || url}" crossorigin="anonymous" playsinline autoplay controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture disableRemotePlayback></video>
   <div id="topbar">${escapeHtml(file.name)}</div>
