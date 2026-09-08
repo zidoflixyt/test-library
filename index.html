@@ -1032,7 +1032,7 @@ function detectFileType(f){
 //  2. Any request that comes back rate-limited (HTTP 429 / quota /
 //     "rate limit" in the error) is retried automatically with
 //     exponential backoff instead of failing the whole load immediately.
-const MAX_CONCURRENT_DRIVE_REQUESTS = 5;
+const MAX_CONCURRENT_DRIVE_REQUESTS = 8;
 let activeDriveRequests = 0;
 const driveRequestQueue = [];
 
@@ -1136,6 +1136,28 @@ function naturalSort(a, b){
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+// ---------- Instant-paint cache ----------
+// A full fresh scan of a large Drive tree can take a couple of minutes
+// (see the rate-limit notes above) — that used to mean a blank skeleton
+// screen for the whole wait, every single time the app opened. Now the
+// last successful result is cached in localStorage and shown instantly;
+// a fresh scan still runs behind it and silently replaces it once ready,
+// so re-opening the app (or coming "back" from a viewer) feels instant
+// even though the real Drive data is still being fetched underneath.
+const SUBJECTS_CACHE_KEY = 'test_library_subjects_cache_v1';
+function loadCachedSubjectsFromStorage(){
+  try{
+    const raw = localStorage.getItem(SUBJECTS_CACHE_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.subjects) ? parsed.subjects : null;
+  }catch(e){ return null; }
+}
+function saveSubjectsToCache(subjects){
+  try{ localStorage.setItem(SUBJECTS_CACHE_KEY, JSON.stringify({ subjects, savedAt: Date.now() })); }
+  catch(e){ /* storage full/unavailable — caching is just an optimization, safe to skip */ }
+}
+
 async function loadFiles(){
   const t = i18n[currentLang];
   const refreshBtn = document.getElementById('refreshBtn');
@@ -1144,43 +1166,92 @@ async function loadFiles(){
     document.getElementById('statusDot').classList.add('err');
     return;
   }
+
+  // Coming "back" out of a video/PDF/test/docx viewer reloads this page
+  // with ?mode=&subject=&search= in the URL (see makeReturnScript()), and
+  // restoreFromUrl() is what jumps back to that exact subject/mode. The
+  // bug this fixes: restoreFromUrl() used to only run after loadFiles()
+  // fully finished — every single time — so on "back" you'd briefly see
+  // the default root/Test view (whatever render() shows meanwhile), then
+  // snap to where you actually were once the full background load
+  // finished. Now it runs as soon as the wanted subject is actually
+  // available (from cache almost always, immediately) instead of waiting
+  // for a fresh Drive scan. restored/tryRestore guard against running it
+  // more than once, since each run does its own history.pushState().
+  const params = new URLSearchParams(location.search);
+  const wantedSubjectId = params.get('subject');
+  let restored = false;
+  function tryRestore(){
+    if(restored) return;
+    if(wantedSubjectId && !cachedSubjects.find(s => s.id === wantedSubjectId)) return; // not loaded yet
+    restored = true;
+    restoreFromUrl();
+  }
+
+  const cached = loadCachedSubjectsFromStorage();
+  const hadCache = !!(cached && cached.length);
+  if(hadCache){
+    // Paint last-known data immediately instead of a blank skeleton, and
+    // jump straight to the right subject/mode from it if possible.
+    cachedSubjects = cached;
+    tryRestore();
+    if(!restored) render();
+    setStatus(t.loading, false);
+  } else {
+    showSkeletons();
+  }
+
   refreshBtn.classList.add('spinning');
-  setStatus('', false);
-  showSkeletons();
   try{
-    // Top-level children of the shared folder: subfolders are "subjects",
-    // loose files at the top level become a "General" subject.
     const topChildren = await fetchFolderChildren(FOLDER_ID);
     const subjectFolders = topChildren.filter(f => f.mimeType === FOLDER_MIME);
     const rootFiles = topChildren.filter(f =>
       f.mimeType !== FOLDER_MIME && detectFileType(f)
     );
 
-    // Every subject folder is kept even if it currently has 0 test files,
-    // so empty subjects still show up and can be opened. Subjects are
-    // fetched in parallel (capped by the concurrency pool above) instead
-    // of one at a time, which is what made large libraries slow and
-    // prone to hitting the rate limit before finishing.
-    const subjects = await Promise.all(subjectFolders.map(async folder => {
+    // On a cold start (no cache yet) subjects are painted one by one as
+    // each finishes, instead of the screen staying blank until every
+    // single subject folder has been fully walked — with 15-20+ subjects
+    // that first-result wait used to BE the whole ~3 minutes. It also
+    // lets tryRestore() catch the exact moment the wanted subject shows
+    // up, rather than waiting for every other subject too.
+    const freshSubjects = [];
+    await Promise.all(subjectFolders.map(async folder => {
       const files = await collectFilesRecursively(folder.id, folder.name, 0);
       files.sort(naturalSort);
-      return { id: folder.id, name: folder.name, files };
+      freshSubjects.push({ id: folder.id, name: folder.name, files });
+      if(!hadCache){
+        cachedSubjects = [...freshSubjects].sort(
+          (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+        tryRestore();
+        if(!restored) render();
+      }
     }));
+
     if(rootFiles.length){
       const files = rootFiles.map(f => ({ ...f, subject: t.general, type: detectFileType(f) }));
       files.sort(naturalSort);
-      subjects.push({ id: '__root__', name: t.general, files });
+      freshSubjects.push({ id: '__root__', name: t.general, files });
     }
-    subjects.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    freshSubjects.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
-    cachedSubjects = subjects;
+    cachedSubjects = freshSubjects;
+    saveSubjectsToCache(freshSubjects);
     document.getElementById('statusDot').classList.remove('err');
-    render();
+    setStatus('', false);
+    // Fallback: covers a wanted subject that still wasn't found (e.g. a
+    // brand-new folder not in the old cache, or no cache at all yet).
+    tryRestore();
+    if(!restored) render();
   }catch(err){
     console.error(err);
     setStatus(t.errorLoad, true);
     document.getElementById('statusDot').classList.add('err');
-    document.getElementById('list').innerHTML = '';
+    if(!hadCache) document.getElementById('list').innerHTML = '';
+    // If we had cache, leave the last-known list on screen rather than
+    // wiping it — a failed background refresh shouldn't blank the app.
+    tryRestore();
   }finally{
     refreshBtn.classList.remove('spinning');
   }
@@ -2282,7 +2353,7 @@ function showApp(){
   if(saved === 'hi' || saved === 'en') currentLang = saved;
   applyLang();
   initHistoryGuard();
-  loadFiles().then(restoreFromUrl);
+  loadFiles();
   startSessionWatch();
 }
 
