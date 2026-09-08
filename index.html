@@ -1017,30 +1017,83 @@ function detectFileType(f){
   return null;
 }
 
+// ---------- Rate-limit-safe Drive API access ----------
+// A big Drive tree (many subject folders, deep nesting) used to be walked
+// one request at a time, fully sequentially. With 15-20+ subjects and lots
+// of nested folders that means a long chain of awaited requests — slow,
+// and if Drive's free-tier rate limit (roughly 100 requests / 100 seconds
+// per user) gets crossed partway through, a single failed request used to
+// abort the whole load and show "Could not load tests".
+//
+// Fix has two parts:
+//  1. A small concurrency pool caps how many requests are in flight at
+//     once (instead of unlimited-parallel or one-at-a-time), so we go
+//     faster than sequential without hammering the API.
+//  2. Any request that comes back rate-limited (HTTP 429 / quota /
+//     "rate limit" in the error) is retried automatically with
+//     exponential backoff instead of failing the whole load immediately.
+const MAX_CONCURRENT_DRIVE_REQUESTS = 5;
+let activeDriveRequests = 0;
+const driveRequestQueue = [];
+
+function runDriveQueue(){
+  while(activeDriveRequests < MAX_CONCURRENT_DRIVE_REQUESTS && driveRequestQueue.length){
+    const job = driveRequestQueue.shift();
+    activeDriveRequests++;
+    job.fn().then(job.resolve, job.reject).finally(()=>{
+      activeDriveRequests--;
+      runDriveQueue();
+    });
+  }
+}
+function queueDriveRequest(fn){
+  return new Promise((resolve, reject)=>{
+    driveRequestQueue.push({ fn, resolve, reject });
+    runDriveQueue();
+  });
+}
+
 async function fetchFolderChildren(folderId){
   const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
   const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&key=${API_KEY}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if(data.error) throw new Error(data.error.message);
-  return data.files || [];
+  const MAX_RETRIES = 5;
+  for(let attempt = 0; ; attempt++){
+    const { res, data } = await queueDriveRequest(async () => {
+      const res = await fetch(url);
+      const data = await res.json();
+      return { res, data };
+    });
+    if(!data.error) return data.files || [];
+    const isRateLimited = res.status === 429
+      || data.error.status === 'RESOURCE_EXHAUSTED'
+      || /rate limit|quota/i.test(data.error.message || '');
+    if(isRateLimited && attempt < MAX_RETRIES){
+      // Exponential backoff with a little jitter: 1s, 2s, 4s, 8s, 16s...
+      const delay = Math.min(1000 * Math.pow(2, attempt), 16000) + Math.random() * 400;
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    throw new Error(data.error.message);
+  }
 }
 
 // Recursively walk the folder tree (up to a safe depth) and collect
 // html test files, tagging each with the subject (its parent folder name).
+// Sibling folders are fetched in parallel (Promise.all) rather than one
+// after another — the concurrency pool above keeps this safe even for
+// wide, deep trees.
 async function collectFilesRecursively(folderId, subjectName, depth){
   if(depth > 4) return [];
   const children = await fetchFolderChildren(folderId);
-  let results = [];
   const subfolders = children.filter(f => f.mimeType === FOLDER_MIME);
   const files = children.filter(f =>
     f.mimeType !== FOLDER_MIME && detectFileType(f)
   );
-  files.forEach(f => results.push({ ...f, subject: subjectName, type: detectFileType(f) }));
-  for(const sub of subfolders){
-    const nested = await collectFilesRecursively(sub.id, sub.name, depth + 1);
-    results = results.concat(nested);
-  }
+  let results = files.map(f => ({ ...f, subject: subjectName, type: detectFileType(f) }));
+  const nestedResultSets = await Promise.all(
+    subfolders.map(sub => collectFilesRecursively(sub.id, sub.name, depth + 1))
+  );
+  nestedResultSets.forEach(nested => { results = results.concat(nested); });
   return results;
 }
 
@@ -1103,14 +1156,16 @@ async function loadFiles(){
       f.mimeType !== FOLDER_MIME && detectFileType(f)
     );
 
-    const subjects = [];
-    for(const folder of subjectFolders){
-      // Every subject folder is kept even if it currently has 0 test files,
-      // so empty subjects still show up and can be opened.
+    // Every subject folder is kept even if it currently has 0 test files,
+    // so empty subjects still show up and can be opened. Subjects are
+    // fetched in parallel (capped by the concurrency pool above) instead
+    // of one at a time, which is what made large libraries slow and
+    // prone to hitting the rate limit before finishing.
+    const subjects = await Promise.all(subjectFolders.map(async folder => {
       const files = await collectFilesRecursively(folder.id, folder.name, 0);
       files.sort(naturalSort);
-      subjects.push({ id: folder.id, name: folder.name, files });
-    }
+      return { id: folder.id, name: folder.name, files };
+    }));
     if(rootFiles.length){
       const files = rootFiles.map(f => ({ ...f, subject: t.general, type: detectFileType(f) }));
       files.sort(naturalSort);
