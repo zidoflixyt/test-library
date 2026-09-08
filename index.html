@@ -617,6 +617,26 @@ const FOLDER_ID = "123GnSkuU_686h-C7807Rg5I_E-16AUPK";
 const SESSION_API_URL = "https://script.google.com/macros/s/AKfycbwmxogUfzMhU79nmGN66qsc328JQ9q0W7ZaJbHK7Xa6uj06mJbNLZo9eH4eHxKIG_qtgw/exec";
 /* ===================================== */
 
+// With many people (80-150+) sharing the SAME API_KEY, Google's Drive API
+// "queries per 100 seconds PER USER" limit (default 100) can otherwise
+// bucket everyone together under one identity, since a plain API key (no
+// per-person login) gives Google nothing else to tell users apart by —
+// meaning one busy device could eat into everyone else's quota. Passing a
+// stable-but-anonymous quotaUser value per device tells Google to track
+// each device's 100-requests/100-seconds allowance separately instead.
+// This is just a random ID stored on THIS device — it identifies the
+// device to Google's rate limiter only, nothing personal, and is not the
+// login username.
+function getQuotaUserId(){
+  let id = localStorage.getItem('drive_quota_user_id');
+  if(!id){
+    id = 'dev-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try{ localStorage.setItem('drive_quota_user_id', id); }catch(e){}
+  }
+  return id;
+}
+const QUOTA_USER = getQuotaUserId();
+
 const i18n = {
   en: {
     brand: "Test Library", langLabel: "Language", eyebrow: "Card catalog",
@@ -1055,7 +1075,7 @@ function queueDriveRequest(fn){
 
 async function fetchFolderChildren(folderId){
   const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
-  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&key=${API_KEY}`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&key=${API_KEY}&quotaUser=${QUOTA_USER}`;
   const MAX_RETRIES = 5;
   for(let attempt = 0; ; attempt++){
     const { res, data } = await queueDriveRequest(async () => {
@@ -1423,7 +1443,7 @@ function makeReturnScript(){
 }
 
 async function openFile(file){
-  const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}`;
+  const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}&quotaUser=${QUOTA_USER}`;
   const t = i18n[currentLang];
 
   const returnScript = makeReturnScript();
@@ -1500,7 +1520,7 @@ async function openFile(file){
     if(currentQ) qualityVariants[currentQ] = file.id;
     const qualityKeys = Object.keys(qualityVariants).sort((a,b)=> parseInt(b) - parseInt(a));
     const qualityUrlMap = {};
-    qualityKeys.forEach(q=>{ qualityUrlMap[q] = `https://www.googleapis.com/drive/v3/files/${qualityVariants[q]}?alt=media&key=${API_KEY}`; });
+    qualityKeys.forEach(q=>{ qualityUrlMap[q] = `https://www.googleapis.com/drive/v3/files/${qualityVariants[q]}?alt=media&key=${API_KEY}&quotaUser=${QUOTA_USER}`; });
     const initialQ = currentQ && qualityUrlMap[currentQ] ? currentQ : (qualityKeys[0] || null);
     document.open();
     document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
