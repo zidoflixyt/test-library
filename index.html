@@ -440,63 +440,120 @@
     overflow-y:auto; -webkit-overflow-scrolling:touch;
   }
   .dash-overlay.open{ display:block; }
-  .dash-inner{ max-width:640px; margin:0 auto; padding:calc(18px + env(safe-area-inset-top, 0px)) 20px 70px; }
-  .dash-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  .dash-title{ margin:0; font-size:23px; font-weight:800; color: var(--header-text); font-family: var(--font-display); }
-  .dash-hero{
-    margin-top:16px; background: var(--panel); border:1px solid var(--panel-line); border-radius: var(--radius-lg);
-    padding:18px; box-shadow: var(--card-shadow); display:flex; align-items:center; gap:18px;
+  /* ===== Dashboard: dark glass (always dark, whatever the app theme) ===== */
+  .dash-overlay{
+    --bg:#07080f; --panel: rgba(255,255,255,.05); --panel-line: rgba(255,255,255,.08); --panel-line-strong: rgba(255,255,255,.18);
+    --search-bg: rgba(255,255,255,.08); --ink:#f2f3fa; --ink-muted: rgba(242,243,250,.62); --ink-faint: rgba(242,243,250,.38);
+    --header-text:#fff; --accent:#a99bff; --good:#59e0a8; --danger:#ff8a8a; --card-shadow:none;
+    --icon-btn-bg: rgba(255,255,255,.07); --icon-btn-line: rgba(255,255,255,.14);
+    --glass: rgba(255,255,255,.05); --glass-line: rgba(255,255,255,.09);
+    color: var(--ink);
   }
-  .dash-ring{ position:relative; width:96px; height:96px; flex-shrink:0; }
-  .dash-ring svg{ width:100%; height:100%; transform: rotate(-90deg); }
-  .dash-ring-num{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    font-size:22px; font-weight:800; color: var(--ink); font-family: var(--font-display);
+  .dash-overlay::before{ content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(70% 38% at 8% 0%, rgba(124,92,255,.38), transparent 72%),
+      radial-gradient(55% 34% at 100% 22%, rgba(56,132,255,.26), transparent 72%),
+      radial-gradient(70% 36% at 40% 100%, rgba(45,212,160,.13), transparent 72%); }
+  .dash-inner{ position:relative; z-index:1; max-width:640px; margin:0 auto; padding:calc(14px + env(safe-area-inset-top, 0px)) 18px calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .dash-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:sticky; top:0; z-index:5; margin:0 -18px; padding:6px 18px 14px; background: linear-gradient(180deg, rgba(7,8,15,.82), rgba(7,8,15,0)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .dash-title{ margin:0; font-size:23px; font-weight:700; letter-spacing:-.02em; color:#fff; font-family: var(--font-display); }
+  .dash-head .icon-btn{ width:38px; height:38px; border-radius:50%; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+  .dash-glass, .dash-hero, .dash-continue, .dash-list{
+    background: var(--glass); border:1px solid var(--glass-line); border-radius:22px;
+    -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 18px 40px -26px rgba(0,0,0,.8);
   }
-  .dash-hero-txt p{ margin:0; }
-  .dash-hero-title{ font-size:12px; font-weight:700; color: var(--accent); text-transform:uppercase; letter-spacing:1px; }
-  .dash-hero-line{ margin-top:4px !important; font-size:16px; font-weight:800; color: var(--ink); font-family: var(--font-display); }
-  .dash-hero-sub{ margin-top:4px !important; font-size:12px; color: var(--ink-muted); }
-  .dash-cats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
-  .dash-cat{
-    background: var(--panel); border:1.5px solid var(--panel-line); border-radius: var(--radius);
-    padding:12px 14px; cursor:pointer; box-shadow: var(--card-shadow);
-  }
-  .dash-cat.active{ border-color: var(--accent); }
-  .dash-cat-top{ display:flex; align-items:center; gap:7px; margin-bottom:9px; }
-  .dash-cat-ic{ width:16px; height:16px; color: var(--accent); display:flex; }
-  .dash-cat-ic svg{ width:16px; height:16px; }
-  .dash-cat-name{ flex:1; font-size:13px; font-weight:700; color: var(--ink); }
-  .dash-cat-pct{ font-size:12px; font-weight:800; color: var(--accent); }
-  .dash-cat-num{ margin-top:7px; font-size:11px; color: var(--ink-muted); }
-  .dash-hint{ margin:12px 2px 0; font-size:11.5px; color: var(--ink-faint); line-height:1.5; }
-  .dash-sub{
-    margin:20px 2px 4px; font-size:13px; font-weight:700; color: var(--accent);
-    text-transform:uppercase; letter-spacing:1px; font-family: var(--font-display);
-  }
-  .dash-subject{ background: var(--panel); border:1px solid var(--panel-line); border-radius: var(--radius); margin-top:10px; overflow:hidden; }
-  .dash-subject-head{ padding:14px; display:flex; align-items:center; gap:10px; cursor:pointer; }
-  .dash-subject-name{
-    flex:1; min-width:0; font-weight:700; font-size:14.5px; color: var(--ink);
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family: var(--font-display);
-  }
-  .dash-subject-pct{ font-size:12px; font-weight:700; color: var(--ink-muted); flex-shrink:0; }
-  .dash-chev{ width:15px; height:15px; color: var(--ink-faint); display:flex; transition: transform .15s ease; flex-shrink:0; }
-  .dash-chev svg{ width:15px; height:15px; }
-  .dash-subject.open .dash-chev{ transform: rotate(90deg); }
-  .dash-subject-body{ display:none; border-top:1px solid var(--panel-line); }
-  .dash-subject.open .dash-subject-body{ display:block; }
-  .dash-row{ display:flex; align-items:center; gap:11px; padding:11px 14px; border-bottom:1px solid var(--panel-line); }
+
+  /* Hero: light and compact */
+  .dash-hero{ padding:20px 20px 18px; }
+  .dash-hero-row{ display:flex; align-items:center; gap:16px; }
+  .dash-big{ margin:0; display:flex; align-items:baseline; font-family: var(--font-display); font-weight:700; font-size:46px; line-height:1; letter-spacing:-.04em; font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg,#ffffff 25%, #b7acff 130%); -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent; }
+  .dash-big small{ font-size:20px; font-weight:600; letter-spacing:0; margin-left:2px; }
+  .dash-hero-meta{ min-width:0; padding-left:16px; border-left:1px solid var(--glass-line); }
+  .dash-eyebrow{ margin:0; font-size:11.5px; font-weight:500; color: var(--ink-muted); }
+  .dash-line{ margin:3px 0 0; font-size:14.5px; font-weight:600; color: var(--ink); line-height:1.3; }
+  .dash-strip{ display:flex; gap:3px; height:8px; margin-top:20px; }
+  .dash-strip .seg{ flex:1 1 0; min-width:4px; padding:0; border:0; border-radius:4px; position:relative; overflow:hidden; cursor:pointer;
+    background: color-mix(in srgb, var(--c) 24%, transparent); -webkit-tap-highlight-color: transparent; transition: transform .15s ease; }
+  .dash-strip .seg:active{ transform: scaleY(1.6); }
+  .dash-strip .seg i{ position:absolute; left:0; top:0; bottom:0; background: var(--c); border-radius:4px; box-shadow: 0 0 10px var(--c); transition: width .9s cubic-bezier(.2,.8,.2,1); }
+  .dash-legend{ display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:14px; font-size:12px; color: var(--ink-muted); }
+  .dash-legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .dash-legend span::before{ content:""; width:6px; height:6px; border-radius:50%; background: var(--dot); }
+  .dash-legend b{ color: var(--ink); font-weight:700; font-variant-numeric: tabular-nums; }
+  .dash-legend .l-done{ --dot: var(--good); } .dash-legend .l-prog{ --dot:#ffc857; } .dash-legend .l-pend{ --dot: rgba(255,255,255,.35); }
+
+  /* Continue */
+  .dash-continue{ display:flex; align-items:center; gap:12px; width:100%; margin-top:10px; padding:10px 14px 10px 10px; text-align:left; cursor:pointer; font-family:inherit; color:inherit; border-radius:18px; -webkit-tap-highlight-color: transparent; }
+  .dash-continue:active{ transform: scale(.985); }
+  .dash-continue-ic{ width:36px; height:36px; border-radius:12px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .dash-continue-ic svg{ width:17px; height:17px; }
+  .dash-continue-main{ flex:1; min-width:0; }
+  .dash-continue-main small{ display:block; font-size:10.5px; font-weight:500; color: var(--ink-muted); }
+  .dash-continue-main b{ display:block; margin-top:1px; font-size:13.5px; font-weight:600; color: var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dash-continue-pct{ flex-shrink:0; font-size:12px; font-weight:700; color: var(--accent); }
+
+  /* Type chips */
+  .dash-chips{ display:flex; gap:8px; margin:14px -18px 0; padding:2px 18px 4px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .dash-chips::-webkit-scrollbar{ display:none; }
+  .dash-chip{ position:relative; flex:0 0 auto; display:flex; align-items:center; gap:9px; padding:9px 14px 11px 11px; overflow:hidden; cursor:pointer; font-family:inherit; color:inherit; text-align:left;
+    background: var(--glass); border:1px solid var(--glass-line); border-radius:16px; -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    transition: background .18s ease, border-color .18s ease; -webkit-tap-highlight-color: transparent; }
+  .dash-chip.active{ background: color-mix(in srgb, var(--sw) 16%, transparent); border-color: color-mix(in srgb, var(--sw) 55%, transparent); }
+  .dash-chip .ic{ width:28px; height:28px; border-radius:9px; display:flex; align-items:center; justify-content:center; background: color-mix(in srgb, var(--sw) 16%, transparent); color: var(--sw); }
+  .dash-chip .ic svg{ width:15px; height:15px; }
+  .dash-chip .tx{ display:block; }
+  .dash-chip .tx b{ display:block; font-size:13px; font-weight:600; color: var(--ink); line-height:1.2; }
+  .dash-chip .tx em{ display:block; margin-top:2px; font-style:normal; font-size:10.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space:nowrap; }
+  .dash-chip .cb{ position:absolute; left:0; right:0; bottom:0; height:2.5px; background: color-mix(in srgb, var(--sw) 18%, transparent); }
+  .dash-chip .cb u{ display:block; height:100%; background: var(--sw); text-decoration:none; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+
+  /* Section label */
+  .dash-sub{ display:flex; align-items:center; justify-content:space-between; margin:24px 4px 4px; font-size:13px; font-weight:600; color: var(--ink-muted); letter-spacing:.01em; }
+  .dash-sub small{ font-size:11.5px; font-weight:500; color: var(--ink-faint); }
+  .dash-clear{ border:none; background: var(--search-bg); color: var(--accent); font-family:inherit; font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:20px; cursor:pointer; }
+  .dash-hint{ margin:0 4px 10px; font-size:11px; color: var(--ink-faint); line-height:1.5; }
+
+  /* Subject list: flat rows, hairlines only */
+  .dash-list{ overflow:hidden; }
+  .dash-subject{ border-bottom:1px solid var(--panel-line); }
+  .dash-subject:last-child{ border-bottom:0; }
+  .dash-subject-head{ padding:14px 16px; display:flex; align-items:center; gap:13px; cursor:pointer; -webkit-tap-highlight-color: transparent; transition: background .18s ease; }
+  .dash-subject-head:active{ background: rgba(255,255,255,.04); }
+  .dash-num{ width:22px; flex-shrink:0; text-align:center; font-size:12px; font-weight:700; color: var(--sw); font-variant-numeric: tabular-nums; }
+  .dash-num svg{ width:16px; height:16px; color: var(--good); display:block; margin:0 auto; }
+  .dash-subject-main{ flex:1; min-width:0; }
+  .dash-subject-name{ display:block; font-weight:600; font-size:14.5px; color: var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dbar{ height:3px; margin-top:9px; border-radius:2px; background: rgba(255,255,255,.08); overflow:hidden; }
+  .dbar i{ display:block; height:100%; border-radius:2px; background: var(--sw); box-shadow: 0 0 8px var(--sw); transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .dbar.full i{ background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .dash-count{ flex-shrink:0; text-align:right; font-size:12px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .dash-count b{ color: var(--ink); font-weight:700; }
+  .dash-count .ip{ display:inline-flex; align-items:center; gap:4px; margin-left:7px; color:#ffc857; font-weight:700; }
+  .dash-count .ip::before{ content:""; width:5px; height:5px; border-radius:50%; background:#ffc857; }
+  .dash-chev{ width:14px; height:14px; color: var(--ink-faint); display:flex; flex-shrink:0; transition: transform .2s ease, color .2s ease; }
+  .dash-chev svg{ width:14px; height:14px; }
+  .dash-subject.open .dash-chev{ transform: rotate(90deg); color: var(--sw); }
+  .dash-subject-body{ display:none; border-top:1px solid var(--panel-line); background: rgba(0,0,0,.18); }
+  .dash-subject.open .dash-subject-body{ display:block; animation: dashDrop .22s ease; }
+  @keyframes dashDrop{ from{ opacity:0; transform: translateY(-6px);} to{ opacity:1; transform:none; } }
+  .dash-row{ display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--panel-line); }
   .dash-row:last-child{ border-bottom:none; }
-  .dash-row-name{ flex:1; min-width:0; font-size:13px; color: var(--ink); cursor:pointer; overflow-wrap:anywhere; line-height:1.4; }
+  .dash-row-main{ flex:1; min-width:0; cursor:pointer; }
+  .dash-row-name{ font-size:13px; color: var(--ink); overflow-wrap:anywhere; line-height:1.4; font-weight:500; }
   .dash-row-name.done{ color: var(--ink-faint); text-decoration: line-through; }
-  .dash-row-type{ margin-top:2px; font-size:9.5px; font-weight:700; color: var(--ink-faint); text-transform:uppercase; letter-spacing:.8px; }
+  .dash-row-type{ margin-top:3px; display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:500; color: var(--ink-faint); }
+  .dash-row-type svg{ width:11px; height:11px; color: var(--sw); }
   .dash-row-pct{ font-size:11px; font-weight:700; color: var(--accent); flex-shrink:0; }
-  .dash-reset{
-    margin-top:26px; width:100%; padding:12px; border-radius:12px; background:transparent;
-    border:1px solid var(--panel-line-strong); color: var(--danger); font-weight:600;
-    font-family: var(--font-body); font-size:13px; cursor:pointer;
-  }
+  .tick-btn{ width:24px; height:24px; border-width:1.5px; }
+  .tick-btn svg{ width:12px; height:12px; }
+
+  .dash-reset{ display:block; margin:26px auto 0; padding:11px 22px; border-radius:30px; background:transparent; border:1px solid color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); font-weight:600; font-family: var(--font-body); font-size:12.5px; cursor:pointer; }
+  .dash-chip:focus-visible, .dash-continue:focus-visible, .dash-strip .seg:focus-visible, .dash-subject-head:focus-visible, .dash-clear:focus-visible, .dash-reset:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  @media (max-width:360px){ .dash-big{ font-size:38px; } .dash-hero-meta{ padding-left:12px; } }
+  @media (prefers-reduced-motion: reduce){ .dash-strip .seg i, .dbar i, .dash-chip .cb u, .dash-subject.open .dash-subject-body{ transition:none; animation:none; } }
 </style>
 </head>
 <body>
@@ -779,7 +836,7 @@ const i18n = {
     resumeRestart: "Start from beginning", stoppedAt: "You stopped at", pageWord: "page",
     continueHeading: "Continue learning", resetAll: "Reset all progress", resetConfirm: "Tap again to confirm",
     dashEmpty: "Nothing uploaded yet", noItems: "Nothing here",
-    dashHint: "Tap the circle to mark complete. Tap a name to open it.", markDone: "Mark complete"
+    dashHint: "Tap the circle to mark complete. Tap a name to open it.", markDone: "Mark complete", dashStripHint: "Each block is a subject. Tap one to jump to it.", dashByType: "By type"
   },
   hi: {
     brand: "टेस्ट लाइब्रेरी", langLabel: "भाषा", eyebrow: "कार्ड कैटलॉग",
@@ -817,7 +874,7 @@ const i18n = {
     resumeRestart: "शुरू से शुरू करें", stoppedAt: "आप यहाँ रुके थे:", pageWord: "पेज",
     continueHeading: "पढ़ाई जारी रखें", resetAll: "सारी प्रोग्रेस रीसेट करें", resetConfirm: "पक्का करने के लिए फिर दबाएँ",
     dashEmpty: "अभी कुछ अपलोड नहीं हुआ", noItems: "यहाँ कुछ नहीं है",
-    dashHint: "पूरा मार्क करने के लिए गोले पर टैप करें। खोलने के लिए नाम पर टैप करें।", markDone: "पूरा मार्क करें"
+    dashHint: "पूरा मार्क करने के लिए गोले पर टैप करें। खोलने के लिए नाम पर टैप करें।", markDone: "पूरा मार्क करें", dashStripHint: "हर ब्लॉक एक विषय है। सीधे जाने के लिए टैप करें।", dashByType: "प्रकार के अनुसार"
   }
 };
 let currentLang = 'en';
@@ -1778,6 +1835,29 @@ function dashItems(){
   return items;
 }
 
+const DASH_COLORS = ['#a996ff', '#7fadff', '#ffab6b', '#6fe0a3', '#ff8ec2'];
+const DASH_GROUP_COLOR = { video: '#7fadff', pdf: '#ffab6b', study: '#6fe0a3', test: '#a996ff' };
+let dashAnimate = false;
+
+// 0.2% instead of a flat 0% when only a few items are done
+function dashPct(d, t, hero){
+  const v = t ? d / t * 100 : 0;
+  if(v <= 0) return '0';
+  if(v >= 100) return '100';
+  if(hero || v < 1){
+    let s = v.toFixed(1);
+    if(s === '0.0') s = '0.1';
+    if(s === '100.0') s = '99.9';
+    return s;
+  }
+  return String(Math.min(99, Math.round(v)));
+}
+function dashSplitName(name, idx){
+  const m = /^\s*(\d+)\s*[).:\-]\s*(.*)$/.exec(name || '');
+  const n = m ? m[1] : String(idx + 1);
+  return { num: n.length < 2 ? '0' + n : n, label: m ? (m[2] || name) : name };
+}
+
 function renderDashboard(){
   const t = i18n[currentLang];
   const overlay = document.getElementById('dashOverlay');
@@ -1795,7 +1875,10 @@ function renderDashboard(){
 
   const st = {};
   ['all'].concat(DASH_GROUPS).forEach(g => { st[g] = { total: 0, done: 0, prog: 0 }; });
-  items.forEach(it => {
+  const subj = new Map();
+  const keyIndex = new Map();
+  items.forEach((it, i) => {
+    keyIndex.set(it.key, i);
     const r = all[it.key];
     const done = !!(r && r.done);
     const inprog = !done && r && r.pct >= 1;
@@ -1804,34 +1887,71 @@ function renderDashboard(){
       if(done) st[g].done++;
       else if(inprog) st[g].prog++;
     });
+    const a = subj.get(it.subject.id) || { total: 0, done: 0 };
+    a.total++; if(done) a.done++;
+    subj.set(it.subject.id, a);
   });
-  const pc = g => st[g].total ? Math.round(st[g].done / st[g].total * 100) : 0;
 
-  const C = 2 * Math.PI * 42;
-  const overall = pc('all');
-  let html = '<div class="dash-hero">'
-    + '<div class="dash-ring"><svg viewBox="0 0 100 100">'
-    + '<circle cx="50" cy="50" r="42" fill="none" style="stroke:var(--search-bg)" stroke-width="10"/>'
-    + '<circle cx="50" cy="50" r="42" fill="none" style="stroke:var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + (C * overall / 100).toFixed(1) + ' ' + C.toFixed(1) + '"/>'
-    + '</svg><div class="dash-ring-num">' + overall + '%</div></div>'
-    + '<div class="dash-hero-txt">'
-    + '<p class="dash-hero-title">' + t.dashOverall + '</p>'
-    + '<p class="dash-hero-line">' + fillText(t.dashCompletedLine, { d: st.all.done, t: st.all.total }) + '</p>'
-    + '<p class="dash-hero-sub">' + fillText(t.dashInProgress, { n: st.all.prog }) + ' · ' + fillText(t.dashPending, { n: st.all.total - st.all.done }) + '</p>'
-    + '</div></div>';
+  const anim = dashAnimate;
+  const W = v => anim ? 0 : v;
+  const bare = s => fillText(s, { n: '' }).replace(/\s+/g, ' ').trim();
+  const subjColor = {};
+  cachedSubjects.forEach((s, i) => { subjColor[s.id] = DASH_COLORS[i % DASH_COLORS.length]; });
 
-  html += '<div class="dash-cats">';
+  // ---------- Hero ----------
+  const heroStr = dashPct(st.all.done, st.all.total, true);
+  let html = '<section class="dash-hero">'
+    + '<div class="dash-hero-row">'
+    + '<p class="dash-big"><span data-count="' + heroStr + '">' + (anim ? '0' : heroStr) + '</span><small>%</small></p>'
+    + '<div class="dash-hero-meta"><p class="dash-eyebrow">' + t.dashOverall + '</p>'
+    + '<p class="dash-line">' + fillText(t.dashCompletedLine, { d: st.all.done, t: st.all.total }) + '</p></div></div>'
+    + '<div class="dash-strip" title="' + escapeHtml(t.dashStripHint) + '">';
+  cachedSubjects.forEach(s => {
+    const a = subj.get(s.id);
+    if(!a) return;
+    const w = a.done / a.total * 100;
+    html += '<button type="button" class="seg" data-act="jump" data-sid="' + escapeHtml(s.id) + '" aria-label="' + escapeHtml(s.name) + '" style="flex-grow:' + a.total + ';--c:' + subjColor[s.id] + '">'
+      + '<i data-w="' + w.toFixed(2) + '" style="width:' + W(w.toFixed(2)) + '%;' + (w > 0 ? 'min-width:3px' : '') + '"></i></button>';
+  });
+  html += '</div><div class="dash-legend">'
+    + '<span class="l-done"><b>' + st.all.done + '</b> ' + t.doneWord + '</span>'
+    + '<span class="l-prog"><b>' + st.all.prog + '</b> ' + bare(t.dashInProgress) + '</span>'
+    + '<span class="l-pend"><b>' + (st.all.total - st.all.done) + '</b> ' + bare(t.dashPending) + '</span>'
+    + '</div></section>';
+
+  // ---------- Continue learning ----------
+  let last = null;
+  Object.keys(all).forEach(k => {
+    const r = all[k];
+    if(!r || r.done || !(r.ts > 0) || !keyIndex.has(k)) return;
+    if(!last || r.ts > all[last].ts) last = k;
+  });
+  if(last){
+    const li = keyIndex.get(last), lr = all[last], lit = items[li];
+    const lp = Math.round(lr.pct || 0);
+    html += '<button type="button" class="dash-continue" data-act="open" data-i="' + li + '">'
+      + '<span class="dash-continue-ic">' + groupIcon(lit.group) + '</span>'
+      + '<span class="dash-continue-main"><small>' + t.continueHeading + '</small><b>' + escapeHtml(lit.file.name) + '</b></span>'
+      + (lp >= 1 ? '<span class="dash-continue-pct">' + lp + '%</span>' : '') + '</button>';
+  }
+
+  // ---------- Type chips (filter) ----------
+  html += '<div class="dash-chips">';
   DASH_GROUPS.forEach(g => {
-    const s = st[g], p = pc(g);
-    html += '<div class="dash-cat' + (dashFilter === g ? ' active' : '') + '" data-act="cat" data-g="' + g + '">'
-      + '<div class="dash-cat-top"><span class="icon dash-cat-ic">' + groupIcon(g) + '</span><span class="dash-cat-name">' + groupLabel(g) + '</span><span class="dash-cat-pct">' + p + '%</span></div>'
-      + '<div class="prog-bar' + (s.total && p === 100 ? ' done' : '') + '"><i style="width:' + p + '%"></i></div>'
-      + '<div class="dash-cat-num">' + s.done + ' / ' + s.total + '</div></div>';
+    const s = st[g];
+    const p = s.total ? s.done / s.total * 100 : 0;
+    html += '<button type="button" class="dash-chip' + (dashFilter === g ? ' active' : '') + '" data-act="cat" data-g="' + g + '" aria-pressed="' + (dashFilter === g) + '" style="--sw:' + DASH_GROUP_COLOR[g] + '">'
+      + '<span class="ic">' + groupIcon(g) + '</span>'
+      + '<span class="tx"><b>' + groupLabel(g) + '</b><em>' + s.done + '/' + s.total + ' · ' + dashPct(s.done, s.total) + '%</em></span>'
+      + '<span class="cb"><u data-w="' + p.toFixed(2) + '" style="width:' + W(p.toFixed(2)) + '%;' + (p > 0 ? 'min-width:3px' : '') + '"></u></span></button>';
   });
-  html += '</div><p class="dash-hint">' + t.dashHint + '</p>';
+  html += '</div>';
 
+  // ---------- Subjects ----------
   const filterLabel = dashFilter === 'all' ? t.dashBySubject : groupLabel(dashFilter);
-  html += '<div class="dash-sub">' + escapeHtml(filterLabel) + '</div>';
+  html += '<div class="dash-sub"><span>' + escapeHtml(filterLabel) + '</span>'
+    + (dashFilter === 'all' ? '<small>' + cachedSubjects.length + '</small>' : '<button type="button" class="dash-clear" data-act="cat" data-g="' + dashFilter + '">✕ ' + t.dashBySubject + '</button>')
+    + '</div><p class="dash-hint">' + t.dashHint + '</p>';
 
   const rowsBySubject = new Map();
   items.forEach((it, i) => {
@@ -1842,18 +1962,23 @@ function renderDashboard(){
   });
 
   let any = false;
-  cachedSubjects.forEach(s => {
+  html += '<div class="dash-list">';
+  cachedSubjects.forEach((s, sIdx) => {
     const idxs = rowsBySubject.get(s.id);
     if(!idxs) return;
     any = true;
-    let d = 0;
-    idxs.forEach(i => { const r = all[items[i].key]; if(r && r.done) d++; });
-    const p = Math.round(d / idxs.length * 100);
+    let d = 0, ip = 0;
+    idxs.forEach(i => { const r = all[items[i].key]; if(r && r.done) d++; else if(r && r.pct >= 1) ip++; });
+    const p = d / idxs.length * 100;
+    const full = d === idxs.length;
     const open = dashOpen.has(s.id);
-    html += '<div class="dash-subject' + (open ? ' open' : '') + '">'
-      + '<div class="dash-subject-head" data-act="subj" data-sid="' + escapeHtml(s.id) + '">'
-      + '<span class="dash-subject-name">' + escapeHtml(s.name) + '</span>'
-      + '<span class="dash-subject-pct">' + d + '/' + idxs.length + ' · ' + p + '%</span>'
+    const nm = dashSplitName(s.name, sIdx);
+    html += '<div class="dash-subject' + (open ? ' open' : '') + '" style="--sw:' + subjColor[s.id] + '">'
+      + '<div class="dash-subject-head" role="button" tabindex="0" aria-expanded="' + open + '" data-act="subj" data-sid="' + escapeHtml(s.id) + '">'
+      + '<span class="dash-num">' + (full ? ICONS.tick : escapeHtml(nm.num)) + '</span>'
+      + '<div class="dash-subject-main"><span class="dash-subject-name">' + escapeHtml(nm.label) + '</span>'
+      + '<div class="dbar' + (full ? ' full' : '') + '"><i data-w="' + p.toFixed(2) + '" style="width:' + W(p.toFixed(2)) + '%;' + (p > 0 ? 'min-width:3px' : '') + '"></i></div></div>'
+      + '<span class="dash-count"><b>' + d + '</b>/' + idxs.length + (ip ? '<span class="ip">' + ip + '</span>' : '') + '</span>'
       + '<span class="icon dash-chev">' + ICONS.chevron + '</span></div>'
       + '<div class="dash-subject-body">';
     if(open){
@@ -1864,20 +1989,40 @@ function renderDashboard(){
         const pct = r ? Math.round(r.pct || 0) : 0;
         const sub = (it.file.subject && it.file.subject !== s.name) ? escapeHtml(it.file.subject) + ' › ' : '';
         html += '<div class="dash-row">'
-          + '<button class="tick-btn' + (done ? ' on' : '') + '" data-act="tick" data-i="' + i + '" aria-label="' + t.markDone + '">' + ICONS.tick + '</button>'
-          + '<div class="dash-row-name' + (done ? ' done' : '') + '" data-act="open" data-i="' + i + '">' + sub + escapeHtml(it.file.name)
-          + (dashFilter === 'all' ? '<div class="dash-row-type">' + groupLabel(it.group) + '</div>' : '') + '</div>'
+          + '<button type="button" class="tick-btn' + (done ? ' on' : '') + '" data-act="tick" data-i="' + i + '" aria-label="' + t.markDone + '">' + ICONS.tick + '</button>'
+          + '<div class="dash-row-main" data-act="open" data-i="' + i + '"><div class="dash-row-name' + (done ? ' done' : '') + '">' + sub + escapeHtml(it.file.name) + '</div>'
+          + (dashFilter === 'all' ? '<div class="dash-row-type"><span class="icon">' + groupIcon(it.group) + '</span>' + groupLabel(it.group) + '</div>' : '') + '</div>'
           + ((!done && isTrackable(it.file) && pct >= 1) ? '<span class="dash-row-pct">' + pct + '%</span>' : '')
           + '</div>';
       });
     }
     html += '</div></div>';
   });
+  html += '</div>';
   if(!any) html += '<div class="empty">' + t.noItems + '</div>';
 
-  html += '<button class="dash-reset" data-act="reset">' + t.resetAll + '</button>';
+  html += '<button type="button" class="dash-reset" data-act="reset">' + t.resetAll + '</button>';
   body.innerHTML = html;
   overlay.scrollTop = prevScroll;
+
+  // one orchestrated moment on open: number counts up, bars grow
+  if(anim){
+    dashAnimate = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      body.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.getAttribute('data-w') + '%'; });
+    }));
+    const cn = body.querySelector('[data-count]');
+    if(cn && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+      const target = parseFloat(cn.getAttribute('data-count')) || 0;
+      const dec = (cn.getAttribute('data-count').split('.')[1] || '').length;
+      const t0 = performance.now(), dur = 900;
+      (function tick(now){
+        const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        cn.textContent = (target * e).toFixed(dec);
+        if(k < 1) requestAnimationFrame(tick); else cn.textContent = cn.getAttribute('data-count');
+      })(t0);
+    } else if(cn){ cn.textContent = cn.getAttribute('data-count'); }
+  }
 }
 
 function openDashboard(){
@@ -1885,6 +2030,7 @@ function openDashboard(){
   history.pushState({ view: 'dash' }, '', location.pathname);
   document.getElementById('dashOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  dashAnimate = true;
   renderDashboard();
   document.getElementById('dashOverlay').scrollTop = 0;
 }
@@ -1896,6 +2042,9 @@ function closeDashboardUI(){
 
 document.getElementById('dashBtn').addEventListener('click', openDashboard);
 document.getElementById('dashClose').addEventListener('click', ()=> history.back());
+document.getElementById('dashBody').addEventListener('keydown', e=>{
+  if((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-act="subj"]')){ e.preventDefault(); e.target.click(); }
+});
 document.getElementById('dashBody').addEventListener('click', e=>{
   const el = e.target.closest('[data-act]');
   if(!el) return;
@@ -1905,6 +2054,16 @@ document.getElementById('dashBody').addEventListener('click', e=>{
     const g = el.getAttribute('data-g');
     dashFilter = (dashFilter === g) ? 'all' : g;
     renderDashboard();
+  } else if(act === 'jump'){
+    const sid = el.getAttribute('data-sid');
+    dashFilter = 'all';
+    dashOpen.add(sid);
+    renderDashboard();
+    const target = document.querySelector('#dashBody .dash-subject-head[data-sid="' + (window.CSS && CSS.escape ? CSS.escape(sid) : sid) + '"]');
+    if(target){
+      const ov = document.getElementById('dashOverlay');
+      ov.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top - ov.getBoundingClientRect().top + ov.scrollTop - 74), behavior: 'smooth' });
+    }
   } else if(act === 'subj'){
     const sid = el.getAttribute('data-sid');
     if(dashOpen.has(sid)) dashOpen.delete(sid); else dashOpen.add(sid);
