@@ -554,6 +554,11 @@
   .dash-chip:focus-visible, .dash-continue:focus-visible, .dash-strip .seg:focus-visible, .dash-subject-head:focus-visible, .dash-clear:focus-visible, .dash-reset:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   @media (max-width:360px){ .dash-big{ font-size:38px; } .dash-hero-meta{ padding-left:12px; } }
   @media (prefers-reduced-motion: reduce){ .dash-strip .seg i, .dbar i, .dash-chip .cb u, .dash-subject.open .dash-subject-body{ transition:none; animation:none; } }
+
+  .card-pop{ flex-shrink:0; width:36px; height:36px; margin:0 6px 0 4px; padding:0; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    background: var(--search-bg); border:1px solid var(--panel-line-strong); color: var(--accent); -webkit-tap-highlight-color: transparent; }
+  .card-pop svg{ width:17px; height:17px; fill:currentColor; }
+  .card-pop:active{ transform: scale(.92); }
 </style>
 </head>
 <body>
@@ -1496,6 +1501,9 @@ function buildBookCard(f, idx){
   div.className = 'index-card';
   div.style.animationDelay = (idx * 0.03) + 's';
   const date = new Date(f.modifiedTime).toLocaleDateString(currentLang==='hi' ? 'hi-IN':'en-IN');
+  const popBtn = f.type === 'video'
+    ? '<button type="button" class="card-pop" aria-label="Popup player"><svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg></button>'
+    : '';
   div.innerHTML = `
     <div class="card-accent"></div>
     <div class="card-icon"><span class="icon">${iconForFile(f)}</span></div>
@@ -1504,9 +1512,12 @@ function buildBookCard(f, idx){
       <p class="card-meta">${date}</p>
     </div>
     <span class="done-badge" aria-label="Completed"><svg viewBox="0 0 24 24"><path d="M12 1.5l2.4 1.6 2.9-.2 1.2 2.6 2.6 1.2-.2 2.9L22.5 12l-1.6 2.4.2 2.9-2.6 1.2-1.2 2.6-2.9-.2L12 22.5l-2.4-1.6-2.9.2-1.2-2.6-2.6-1.2.2-2.9L1.5 12l1.6-2.4-.2-2.9 2.6-1.2 1.2-2.6 2.9.2z" fill="#1d9bf0"/><path d="M7.6 12.4l3 3 5.8-6.2" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    ${popBtn}
     <span class="icon card-arrow">${ICONS.chevron}</span>
   `;
   paintCardProgress(div, f);
+  const pb = div.querySelector('.card-pop');
+  if(pb) pb.addEventListener('click', e => { e.stopPropagation(); startPopupFor(f); });
   div.addEventListener('click', ()=>openWithChoice(f));
   return div;
 }
@@ -2094,6 +2105,343 @@ document.getElementById('dashBody').addEventListener('click', e=>{
   }
 });
 
+
+/* ====================== POPUP PLAYER ======================
+   A floating mini player: drag it anywhere, pinch / corner-drag / wheel to
+   resize, tap for controls. It is self-contained (no outside variables) so
+   the very same source is also injected into the PDF / study / test viewers
+   (see popupScriptTag) and the video follows you from page to page: its
+   state lives in sessionStorage and is restored on every new page. */
+function tlPopupBoot(){
+  try{ if(window.__tlPopupCleanup) window.__tlPopupCleanup(); }catch(e){}
+  var KEY = 'tl_popup_v1', POSKEY = 'tl_popup_pos_v1';
+  var st = null, root = null, vid = null, E = {};
+  var pos = { w: 200, x: null, y: null };
+  try{ var sp = JSON.parse(localStorage.getItem(POSKEY) || 'null'); if(sp && isFinite(sp.w)){ pos.w = sp.w; pos.x = sp.x; pos.y = sp.y; } }catch(e){}
+  var aspect = 16 / 9, hideTimer = null, progReady = false, lastProg = 0, lastPersist = 0, seeking = false;
+  var MINW = 120;
+  var ICON = {
+    play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M18.3 5.7a1 1 0 0 0-1.4 0L12 10.6 7.1 5.7a1 1 0 0 0-1.4 1.4L10.6 12l-4.9 4.9a1 1 0 1 0 1.4 1.4L12 13.4l4.9 4.9a1 1 0 0 0 1.4-1.4L13.4 12l4.9-4.9a1 1 0 0 0 0-1.4z"/></svg>',
+    expand: '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>',
+    size: '<svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>',
+    grip: '<svg viewBox="0 0 24 24"><path d="M20 9L9 20M20 15l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>'
+  };
+  var CSS = [
+    '.tlp-root{position:fixed;left:0;top:0;z-index:2147483000;background:#000;border-radius:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;',
+    'box-shadow:0 14px 40px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.22);font-family:Poppins,system-ui,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;}',
+    '.tlp-v{width:100%;height:100%;display:block;object-fit:contain;background:#000;pointer-events:none;}',
+    '.tlp-shade{position:absolute;inset:0;opacity:0;transition:opacity .2s;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,.05) 38%,rgba(0,0,0,.05) 62%,rgba(0,0,0,.7));}',
+    '.tlp-show .tlp-shade{opacity:1;pointer-events:auto;}',
+    '.tlp-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:2px;padding:4px 4px 0;}',
+    '.tlp-name{flex:1;min-width:0;font-size:11px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px;opacity:.92;}',
+    '.tlp-b{background:none;border:0;margin:0;padding:0;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;flex-shrink:0;}',
+    '.tlp-b:active{background:rgba(255,255,255,.18);}',
+    '.tlp-b svg{width:16px;height:16px;fill:#fff;}',
+    '.tlp-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:46px;height:46px;background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}',
+    '.tlp-play svg{width:24px;height:24px;}',
+    '.tlp-bot{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:0 10px 8px;}',
+    '.tlp-tm{font-size:10px;font-variant-numeric:tabular-nums;min-width:34px;opacity:.9;}',
+    '.tlp-seek{flex:1;min-width:0;margin:0;height:14px;background:transparent;-webkit-appearance:none;appearance:none;outline:none;touch-action:none;}',
+    '.tlp-seek::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:rgba(255,255,255,.32);}',
+    '.tlp-seek::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#a99bff;margin-top:-4.5px;}',
+    '.tlp-seek::-moz-range-track{height:3px;border-radius:2px;background:rgba(255,255,255,.32);}',
+    '.tlp-seek::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:#a99bff;}',
+    '.tlp-line{position:absolute;left:0;right:0;bottom:0;height:2.5px;background:rgba(255,255,255,.18);pointer-events:none;transition:opacity .2s;}',
+    '.tlp-line i{display:block;height:100%;width:0;background:#a99bff;}',
+    '.tlp-show .tlp-line{opacity:0;}',
+    '.tlp-grip{position:absolute;right:0;bottom:0;width:30px;height:30px;display:flex;align-items:flex-end;justify-content:flex-end;opacity:.75;cursor:nwse-resize;}',
+    '.tlp-grip svg{width:20px;height:20px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));}',
+    '.tlp-s .tlp-name,.tlp-s .tlp-tm,.tlp-s .tlp-size{display:none;}',
+    '.tlp-s .tlp-play{width:38px;height:38px;}',
+    '.tlp-s .tlp-bot{padding:0 28px 6px 8px;}'
+  ].join('');
+
+  function vw(){ return window.innerWidth || document.documentElement.clientWidth || 360; }
+  function vh(){ return window.innerHeight || document.documentElement.clientHeight || 640; }
+  function boxH(w){ return w / aspect; }
+  function fmt(s){ if(!isFinite(s)) return '0:00'; var m = Math.floor(s / 60), c = Math.floor(s % 60); return m + ':' + (c < 10 ? '0' : '') + c; }
+  function savePos(){ try{ localStorage.setItem(POSKEY, JSON.stringify(pos)); }catch(e){} }
+  function saveState(){
+    if(!st) return;
+    try{
+      if(vid){ st.t = vid.currentTime || 0; st.playing = !vid.paused; }
+      sessionStorage.setItem(KEY, JSON.stringify(st));
+    }catch(e){}
+  }
+  function writeProg(p){
+    var C = st && st.cfg; if(!C) return;
+    try{
+      var o = JSON.parse(localStorage.getItem(C.store) || '{}'); if(!o || typeof o !== 'object') o = {};
+      var r = o[C.key] || {};
+      for(var k in p){ r[k] = p[k]; }
+      r.n = C.name; r.ty = C.type; r.fid = C.fid; r.sid = C.sid; r.ts = Date.now();
+      if(typeof r.pct === 'number' && r.pct >= C.thr && !r.done && !r.nd) r.done = true;
+      o[C.key] = r; localStorage.setItem(C.store, JSON.stringify(o));
+    }catch(e){}
+  }
+  function saveProg(force){
+    if(!st || !st.cfg || !vid || !progReady) return;
+    var d = vid.duration; if(!isFinite(d) || d <= 0) return;
+    var now = Date.now(); if(!force && now - lastProg < 3000) return; lastProg = now;
+    writeProg({ p: vid.currentTime, d: d, pct: Math.min(100, vid.currentTime / d * 100) });
+  }
+
+  function apply(){
+    if(!root) return;
+    pos.w = Math.min(Math.max(MINW, vw() - 8), Math.max(MINW, pos.w));
+    var h = boxH(pos.w);
+    if(pos.x === null || pos.y === null){ pos.x = vw() - pos.w - 10; pos.y = vh() - h - 96; }
+    pos.x = Math.min(vw() - pos.w - 4, Math.max(4, pos.x));
+    pos.y = Math.min(vh() - h - 4, Math.max(4, pos.y));
+    root.style.width = pos.w + 'px';
+    root.style.height = h + 'px';
+    root.style.transform = 'translate3d(' + pos.x + 'px,' + pos.y + 'px,0)';
+    if(pos.w < 215) root.classList.add('tlp-s'); else root.classList.remove('tlp-s');
+  }
+  function setWidthKeepCenter(w){
+    var cx = pos.x + pos.w / 2, cy = pos.y + boxH(pos.w) / 2;
+    pos.w = w; pos.x = cx - w / 2; pos.y = cy - boxH(w) / 2; apply();
+  }
+  function hideControls(){ if(root) root.classList.remove('tlp-show'); }
+  function showControls(){
+    if(!root) return;
+    root.classList.add('tlp-show');
+    clearTimeout(hideTimer);
+    if(vid && !vid.paused) hideTimer = setTimeout(hideControls, 3200);
+  }
+  function syncPlay(){ if(E.play && vid) E.play.innerHTML = vid.paused ? ICON.play : ICON.pause; }
+  function syncSeek(){
+    if(!vid || !E.seek) return;
+    var d = vid.duration, c = vid.currentTime || 0;
+    var f = (isFinite(d) && d > 0) ? c / d : 0;
+    if(!seeking) E.seek.value = Math.round(f * 1000);
+    E.tm.textContent = fmt(c);
+    E.line.style.width = (f * 100) + '%';
+  }
+
+  function build(){
+    if(!document.getElementById('tlpStyle')){
+      var s = document.createElement('style'); s.id = 'tlpStyle'; s.textContent = CSS; (document.head || document.documentElement).appendChild(s);
+    }
+    root = document.createElement('div');
+    root.className = 'tlp-root';
+    root.innerHTML = '<video class="tlp-v" playsinline crossorigin="anonymous" disableRemotePlayback controlsList="nodownload"></video>'
+      + '<div class="tlp-shade">'
+      + '<div class="tlp-top"><button type="button" class="tlp-b tlp-expand" aria-label="Open full player">' + ICON.expand + '</button>'
+      + '<span class="tlp-name"></span>'
+      + '<button type="button" class="tlp-b tlp-size" aria-label="Change size">' + ICON.size + '</button>'
+      + '<button type="button" class="tlp-b tlp-close" aria-label="Close">' + ICON.close + '</button></div>'
+      + '<button type="button" class="tlp-b tlp-play" aria-label="Play or pause"></button>'
+      + '<div class="tlp-bot"><span class="tlp-tm">0:00</span><input class="tlp-seek" type="range" min="0" max="1000" value="0" aria-label="Seek"></div></div>'
+      + '<div class="tlp-line"><i></i></div>'
+      + '<div class="tlp-grip" aria-label="Resize">' + ICON.grip + '</div>';
+    document.body.appendChild(root);
+    vid = root.querySelector('video');
+    E = { play: root.querySelector('.tlp-play'), seek: root.querySelector('.tlp-seek'), tm: root.querySelector('.tlp-tm'), line: root.querySelector('.tlp-line i') };
+    root.querySelector('.tlp-name').textContent = st.name || '';
+    apply(); syncPlay();
+
+    // ---- media events ----
+    vid.addEventListener('loadedmetadata', function(){
+      if(vid.videoWidth && vid.videoHeight){ aspect = Math.min(2.4, Math.max(0.6, vid.videoWidth / vid.videoHeight)); apply(); }
+      try{ vid.playbackRate = st.rate || 1; }catch(e){}
+      var t = st.t || 0;
+      if(isFinite(vid.duration) && t >= vid.duration - 3) t = 0;
+      var go = function(){
+        progReady = true;
+        if(st.playing){
+          var p = vid.play();
+          if(p && p.catch) p.catch(function(){
+            syncPlay(); showControls();
+            var retry = function(){ vid.removeEventListener('canplay', retry); if(vid.paused && st && st.playing){ var q = vid.play(); if(q && q.catch) q.catch(function(){ syncPlay(); }); } };
+            vid.addEventListener('canplay', retry);
+          });
+        }
+      };
+      if(t > 0){
+        var once = function(){ vid.removeEventListener('seeked', once); go(); };
+        vid.addEventListener('seeked', once);
+        try{ vid.currentTime = t; }catch(e){ go(); }
+        setTimeout(function(){ progReady = true; }, 5000);
+      } else { go(); }
+    });
+    vid.addEventListener('timeupdate', function(){
+      syncSeek(); saveProg(false);
+      var n = Date.now(); if(n - lastPersist > 1000){ lastPersist = n; saveState(); }
+    });
+    vid.addEventListener('play', function(){ syncPlay(); showControls(); saveState(); });
+    vid.addEventListener('pause', function(){ syncPlay(); showControls(); saveProg(true); saveState(); });
+    vid.addEventListener('ended', function(){
+      if(st && st.cfg && isFinite(vid.duration)) writeProg({ p: 0, d: vid.duration, pct: 100 });
+      syncPlay(); showControls();
+    });
+    vid.addEventListener('error', function(){ E.tm.textContent = '!'; showControls(); });
+
+    // ---- buttons ----
+    E.play.addEventListener('click', function(){
+      if(vid.paused){ var p = vid.play(); if(p && p.catch) p.catch(function(){}); } else { vid.pause(); }
+      showControls();
+    });
+    root.querySelector('.tlp-close').addEventListener('click', close);
+    root.querySelector('.tlp-expand').addEventListener('click', expand);
+    root.querySelector('.tlp-size').addEventListener('click', function(){
+      var sizes = [170, 240, 330, vw() - 16], next = sizes[0];
+      for(var i = 0; i < sizes.length; i++){ if(sizes[i] > pos.w + 6){ next = sizes[i]; break; } }
+      setWidthKeepCenter(next); savePos(); showControls();
+    });
+    E.seek.addEventListener('input', function(){
+      seeking = true;
+      if(isFinite(vid.duration) && vid.duration > 0){ vid.currentTime = (E.seek.value / 1000) * vid.duration; }
+      showControls();
+    });
+    E.seek.addEventListener('change', function(){ seeking = false; });
+    E.seek.addEventListener('pointerup', function(){ seeking = false; });
+
+    // ---- drag / pinch / resize ----
+    var pts = {}, mode = null, g = {}, swallow = false;
+    root.addEventListener('click', function(e){ if(swallow){ e.stopPropagation(); e.preventDefault(); } }, true);
+    function count(){ var n = 0; for(var k in pts){ n++; } return n; }
+    function two(){ var a = []; for(var k in pts){ a.push(pts[k]); } return a; }
+    root.addEventListener('pointerdown', function(e){
+      var tg = e.target;
+      if(tg.closest && tg.closest('.tlp-grip')){
+        mode = 'resize'; g = { x: e.clientX, y: e.clientY, w: pos.w }; pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+        try{ root.setPointerCapture(e.pointerId); }catch(er){}
+        e.preventDefault(); return;
+      }
+      if(tg.closest && tg.closest('input')) return;           // the seek slider keeps its own drag
+      var onBtn = !!(tg.closest && tg.closest('button'));       // buttons: tap = click, drag = move the window
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if(!onBtn){ try{ root.setPointerCapture(e.pointerId); }catch(er){} }
+      if(count() === 1){
+        mode = 'drag'; g = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, moved: false, btn: onBtn, id: e.pointerId };
+      } else if(count() === 2){
+        try{ root.setPointerCapture(e.pointerId); }catch(er){}
+        var q = two(); var dx = q[0].x - q[1].x, dy = q[0].y - q[1].y;
+        mode = 'pinch'; g = { d0: Math.sqrt(dx * dx + dy * dy) || 1, w0: pos.w, cx: pos.x + pos.w / 2, cy: pos.y + boxH(pos.w) / 2 };
+      }
+    });
+    root.addEventListener('pointermove', function(e){
+      if(!pts[e.pointerId]) return;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if(mode === 'drag'){
+        var dx = e.clientX - g.px, dy = e.clientY - g.py;
+        if(!g.moved && Math.sqrt(dx * dx + dy * dy) < 6) return;
+        if(!g.moved && g.btn){ try{ root.setPointerCapture(g.id); }catch(er){} }
+        g.moved = true; hideControls();
+        pos.x = g.x + dx; pos.y = g.y + dy; apply();
+      } else if(mode === 'pinch' && count() === 2){
+        var q = two(); var ddx = q[0].x - q[1].x, ddy = q[0].y - q[1].y;
+        var dist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        pos.w = g.w0 * dist / g.d0;
+        pos.w = Math.min(Math.max(MINW, vw() - 8), Math.max(MINW, pos.w));
+        pos.x = g.cx - pos.w / 2; pos.y = g.cy - boxH(pos.w) / 2; apply();
+      } else if(mode === 'resize'){
+        var rx = e.clientX - g.x, ry = e.clientY - g.y;
+        pos.w = g.w + (rx + ry * aspect) / 2; apply();
+      }
+    });
+    function end(e){
+      if(!pts[e.pointerId]) return;
+      delete pts[e.pointerId];
+      // A tap on empty video area toggles the controls; a tap that started on a button is that button's click (do not hide it first).
+      if(mode === 'drag' && !g.moved && !g.btn && e.type === 'pointerup'){ if(root.classList.contains('tlp-show')) hideControls(); else showControls(); }
+      if(mode === 'drag' && g.moved && g.btn){ swallow = true; setTimeout(function(){ swallow = false; }, 80); }
+      if(mode === 'drag' || mode === 'resize' || mode === 'pinch') savePos();
+      if(count() === 0) mode = null; else if(mode === 'pinch') mode = null;
+    }
+    root.addEventListener('pointerup', end);
+    root.addEventListener('pointercancel', end);
+    root.addEventListener('wheel', function(e){
+      e.preventDefault();
+      setWidthKeepCenter(pos.w * (e.deltaY < 0 ? 1.08 : 0.92)); savePos();
+    }, { passive: false });
+
+    vid.src = st.url;
+    showControls();
+  }
+
+  function close(){
+    if(vid){
+      try{ saveProg(true); }catch(e){}
+      try{ vid.pause(); vid.removeAttribute('src'); vid.load(); }catch(e){}
+    }
+    if(root && root.parentNode) root.parentNode.removeChild(root);
+    root = null; vid = null; st = null; progReady = false;
+    try{ sessionStorage.removeItem(KEY); }catch(e){}
+  }
+  function expand(){
+    if(!st) return;
+    var fid = st.cfg ? st.cfg.fid : null;
+    try{ saveProg(true); saveState(); if(vid) vid.pause(); }catch(e){}
+    if(!fid) return;
+    if(typeof window.TLPopupExpand === 'function'){ window.TLPopupExpand(fid); return; }
+    try{ sessionStorage.setItem('tl_popup_expand', fid); }catch(e){}
+    location.href = location.origin + location.pathname;
+  }
+  function open(o){
+    if(root) close();
+    st = { url: o.url, name: o.name || '', t: o.t || 0, playing: o.playing !== false, rate: o.rate || 1, cfg: o.cfg || null };
+    lastProg = 0; build(); saveState();
+  }
+  function persist(){ try{ saveProg(true); saveState(); savePos(); }catch(e){} }
+
+  function onHide(){ if(document.hidden) persist(); }
+  function onResize(){ apply(); }
+  window.addEventListener('pagehide', persist);
+  document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('resize', onResize);
+  window.__tlPopupCleanup = function(){
+    window.removeEventListener('pagehide', persist);
+    document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('resize', onResize);
+    clearTimeout(hideTimer);
+  };
+  window.TLPopup = { open: open, close: close, persist: persist, isOpen: function(){ return !!root; } };
+
+  var saved = null;
+  try{ saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); }catch(e){}
+  function start(){ if(saved && saved.url){ st = saved; build(); } }
+  if(document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+}
+function popupScriptTag(){ return scriptTag('(' + tlPopupBoot.toString() + ')();'); }
+
+function startPopupFor(file){
+  if(!window.TLPopup) return;
+  const rec = progGet(file);
+  const sub = topSubjectOf(file) || {};
+  window.TLPopup.open({
+    url: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}&quotaUser=${QUOTA_USER}`,
+    name: file.name, t: (rec && rec.p > 0) ? rec.p : 0, playing: true, rate: 1,
+    cfg: { store: progStoreKey(), key: progKey(file), fid: file.id, name: file.name, type: file.type, sid: sub.id || '', thr: 95 }
+  });
+}
+// "Open full player" from the popup: continue the same video, full screen, from where it was.
+window.TLPopupExpand = function(fid){
+  const run = () => {
+    const it = dashItems().find(x => x.file.id === fid);
+    if(!it) return false;
+    if(window.TLPopup) window.TLPopup.close();
+    openFile(it.file, { resume: true, returnTo: { mode: 'video', subjectId: (it.subject && it.subject.id) || null } });
+    return true;
+  };
+  if(run()) return true;
+  // The library may still be loading right after a page change: keep trying for a few seconds.
+  let n = 0;
+  const iv = setInterval(() => { if(++n > 40 || run()) clearInterval(iv); }, 400);
+  return true;
+};
+(function(){
+  try{
+    const fid = sessionStorage.getItem('tl_popup_expand');
+    if(!fid) return;
+    sessionStorage.removeItem('tl_popup_expand');
+    window.TLPopupExpand(fid);
+  }catch(e){}
+})();
+
 /* ---------- Scripts that run INSIDE the video / PDF / study viewers ---------- */
 function scriptTag(js){ return '<' + 'script>' + js + '<' + '/script>'; }
 
@@ -2106,7 +2454,7 @@ function makeProgressScript(file){
   };
   const js = '(function(){var C=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';'
     + 'function all(){try{var o=JSON.parse(localStorage.getItem(C.store)||"{}");return(o&&typeof o==="object")?o:{};}catch(e){return {};}}'
-    + 'window.TLProg={get:function(){return all()[C.key]||null;},save:function(p){try{var a=all();var r=a[C.key]||{};'
+    + 'window.TLProg={cfg:C,get:function(){return all()[C.key]||null;},save:function(p){try{var a=all();var r=a[C.key]||{};'
     + 'for(var k in p){r[k]=p[k];}'
     + 'r.n=C.name;r.ty=C.type;r.fid=C.fid;r.sid=C.sid;r.ts=Date.now();'
     + 'if(typeof r.pct==="number"&&r.pct>=C.thr&&!r.done&&!r.nd){r.done=true;}'
@@ -2164,6 +2512,9 @@ async function openFile(file, opts){
   const url = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&key=${API_KEY}&quotaUser=${QUOTA_USER}`;
   const t = i18n[currentLang];
 
+  // Keep the popup in sync before this page gets replaced; a full-screen video replaces the popup.
+  if(window.TLPopup){ if(file.type === 'video') window.TLPopup.close(); else window.TLPopup.persist(); }
+  // The popup follows you into the PDF / study / test viewers (not into the video viewer itself).
   const returnScript = makeReturnScript(opts.returnTo);
 
   // Progress memory: "resume" jumps back to the saved spot, otherwise the
@@ -2228,9 +2579,10 @@ async function openFile(file, opts){
         </style></head>
         <body><div class="docx-wrap">${styledHtml}</div>${progScript}${docTrackScript}${returnScript}</body></html>`);
       document.close();
+      try{ tlPopupBoot(); }catch(_e){}
     }catch(err){
       console.error(err);
-      alert(t.downloadError);
+      alert(t.downloadError + '\n\n[' + ((err && err.message) ? err.message : String(err)) + ']');
     }
     return;
   }
@@ -2384,6 +2736,7 @@ async function openFile(file, opts){
       <button id="silenceBtn" title="Fast-forward during silence"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6z"/></svg><span>Silence</span></button>
       <button id="qualityBtn" style="display:none">Auto</button>
       <button id="speedBtn">Normal</button>
+      <button id="popBtn" title="Popup player"><svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg></button>
       <button id="fsBtn"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
     </div>
   </div>
@@ -2957,6 +3310,43 @@ ${progScript}
       silenceSince = null; soundSince = null;
     }
   });
+
+})();
+<\/script>
+<script>
+(function(){
+  // Popup button + load diagnostics. Kept in its OWN script so it can never affect the player above.
+  var v = document.getElementById('vid'), b = document.getElementById('popBtn');
+  if(!v) return;
+  if(b) b.addEventListener('click', function(){
+    try{
+      var d = v.duration;
+      if(window.TLProg && isFinite(d) && d > 0) window.TLProg.save({ p: v.currentTime, d: d, pct: Math.min(100, v.currentTime / d * 100) });
+      var rate = v.playbackRate; if(!(rate >= 0.5 && rate <= 3)) rate = 1;
+      sessionStorage.setItem('tl_popup_v1', JSON.stringify({
+        url: v.currentSrc || v.src,
+        name: ${JSON.stringify(file.name).replace(/</g, '\\u003c')},
+        t: v.currentTime || 0, playing: !v.paused, rate: rate,
+        cfg: (window.TLProg && window.TLProg.cfg) || null
+      }));
+    }catch(e){}
+    try{ v.pause(); }catch(e){}
+    history.back();
+  });
+  v.addEventListener('error', function(){
+    var code = v.error ? v.error.code : '?';
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:84px;z-index:99;background:rgba(20,20,30,.92);color:#fff;font:600 13px/1.5 Poppins,sans-serif;padding:12px 14px;border-radius:12px;text-align:center';
+    box.textContent = 'Video load nahi hua (code ' + code + ')';
+    document.body.appendChild(box);
+    try{
+      fetch(v.currentSrc || v.src, { headers: { Range: 'bytes=0-0' } }).then(function(r){
+        box.textContent = 'Video load nahi hua. Google Drive ne HTTP ' + r.status + ' diya.';
+      }).catch(function(er){
+        box.textContent = 'Video load nahi hua. Network/CORS error: ' + (er && er.message ? er.message : er);
+      });
+    }catch(e){}
+  });
 })();
 <\/script>
 ${returnScript}
@@ -2985,6 +3375,7 @@ ${returnScript}
       document.open();
       document.write(injected);
       document.close();
+      try{ tlPopupBoot(); }catch(_e){}
     } else if(file.type === 'pdf'){
       // Rendered as canvases via PDF.js instead of <embed type="application/pdf">.
       // WebView-based APK shells (webintoapp/Appilix and similar) have no
@@ -3092,6 +3483,7 @@ ${returnScript}
           ${returnScript}
         </body></html>`);
       document.close();
+      try{ tlPopupBoot(); }catch(_e){}
     } else {
       // Images: fetch as a blob and embed it inline on a fresh page (no
       // top-level navigation to the API URL or to the blob itself).
@@ -3102,10 +3494,11 @@ ${returnScript}
       document.open();
       document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#0b0e1c;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${objUrl}" style="max-width:100%;height:auto;"></body>${returnScript}</html>`);
       document.close();
+      try{ tlPopupBoot(); }catch(_e){}
     }
   }catch(err){
     console.error(err);
-    alert('Could not open this file. Please check your internet connection and try again.');
+    alert('Could not open this file. Please check your internet connection and try again.\n\n[' + ((err && err.message) ? err.message : String(err)) + ']');
   }
 }
 
@@ -3360,6 +3753,8 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   }
 })();
 
+
+tlPopupBoot();
 </script>
 
 </body>
