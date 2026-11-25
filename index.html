@@ -2126,7 +2126,6 @@ function tlPopupBoot(){
     close: '<svg viewBox="0 0 24 24"><path d="M18.3 5.7a1 1 0 0 0-1.4 0L12 10.6 7.1 5.7a1 1 0 0 0-1.4 1.4L10.6 12l-4.9 4.9a1 1 0 1 0 1.4 1.4L12 13.4l4.9 4.9a1 1 0 0 0 1.4-1.4L13.4 12l4.9-4.9a1 1 0 0 0 0-1.4z"/></svg>',
     expand: '<svg viewBox="0 0 24 24"><path d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg>',
     size: '<svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>',
-    pip: '<svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg>',
     grip: '<svg viewBox="0 0 24 24"><path d="M20 9L9 20M20 15l-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>'
   };
   var CSS = [
@@ -2154,8 +2153,6 @@ function tlPopupBoot(){
     '.tlp-show .tlp-line{opacity:0;}',
     '.tlp-grip{position:absolute;right:0;bottom:0;width:30px;height:30px;display:flex;align-items:flex-end;justify-content:flex-end;opacity:.75;cursor:nwse-resize;}',
     '.tlp-grip svg{width:20px;height:20px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));}',
-    '.tlp-inpip{visibility:hidden;pointer-events:none;}',
-    '.tlp-note{position:absolute;left:6px;right:6px;top:38px;z-index:3;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.78);font-size:11px;line-height:1.35;text-align:center;pointer-events:none;}',
     '.tlp-s .tlp-name,.tlp-s .tlp-tm,.tlp-s .tlp-size{display:none;}',
     '.tlp-s .tlp-play{width:38px;height:38px;}',
     '.tlp-s .tlp-bot{padding:0 28px 6px 8px;}'
@@ -2234,7 +2231,6 @@ function tlPopupBoot(){
       + '<div class="tlp-shade">'
       + '<div class="tlp-top"><button type="button" class="tlp-b tlp-expand" aria-label="Open full player">' + ICON.expand + '</button>'
       + '<span class="tlp-name"></span>'
-      + '<button type="button" class="tlp-b tlp-pip" aria-label="Float over other apps">' + ICON.pip + '</button>'
       + '<button type="button" class="tlp-b tlp-size" aria-label="Change size">' + ICON.size + '</button>'
       + '<button type="button" class="tlp-b tlp-close" aria-label="Close">' + ICON.close + '</button></div>'
       + '<button type="button" class="tlp-b tlp-play" aria-label="Play or pause"></button>'
@@ -2288,40 +2284,6 @@ function tlPopupBoot(){
       if(vid.paused){ var p = vid.play(); if(p && p.catch) p.catch(function(){}); } else { vid.pause(); }
       showControls();
     });
-    // ---- Float over OTHER apps: the browser's system Picture-in-Picture ----
-    function note(msg){
-      var n = document.createElement('div'); n.className = 'tlp-note'; n.textContent = msg; root.appendChild(n);
-      setTimeout(function(){ if(n.parentNode) n.parentNode.removeChild(n); }, 3200);
-    }
-    function pipSupported(){ return !!(vid.requestPictureInPicture && document.pictureInPictureEnabled !== false); }
-    function togglePip(){
-      if(document.pictureInPictureElement === vid){ try{ document.exitPictureInPicture(); }catch(e){} return; }
-      var start = function(){
-        if(pipSupported()){
-          vid.requestPictureInPicture().catch(function(err){ note('PiP: ' + (err && err.name ? err.name : 'error')); });
-        } else {
-          // Fallback: a playing FULLSCREEN video turns into a floating window when you press Home (Android).
-          var fs = vid.requestFullscreen || vid.webkitRequestFullscreen || vid.webkitEnterFullscreen;
-          if(fs){ try{ var r = fs.call(vid); if(r && r.catch) r.catch(function(){}); }catch(e){} note('Ab Home dabao: video floating window mein chalega'); }
-          else { note('Is browser mein floating window support nahi hai'); }
-        }
-      };
-      if(vid.paused){ var p = vid.play(); if(p && p.then){ p.then(start, start); return; } }
-      start();
-    }
-    root.querySelector('.tlp-pip').addEventListener('click', togglePip);
-    vid.addEventListener('enterpictureinpicture', function(){ root.classList.add('tlp-inpip'); });
-    vid.addEventListener('leavepictureinpicture', function(){ root.classList.remove('tlp-inpip'); syncPlay(); syncSeek(); });
-    try{ vid.autoPictureInPicture = true; }catch(e){}
-    if('mediaSession' in navigator){
-      try{ navigator.mediaSession.metadata = new MediaMetadata({ title: st.name || 'Video', artist: 'Test Library' }); }catch(e){}
-      var ms = function(a, f){ try{ navigator.mediaSession.setActionHandler(a, f); }catch(e){} };
-      ms('play', function(){ var p = vid.play(); if(p && p.catch) p.catch(function(){}); });
-      ms('pause', function(){ vid.pause(); });
-      ms('seekbackward', function(){ vid.currentTime = Math.max(0, vid.currentTime - 10); });
-      ms('seekforward', function(){ vid.currentTime = Math.min(vid.duration || 1e9, vid.currentTime + 10); });
-      ms('enterpictureinpicture', function(){ if(pipSupported() && !vid.paused) vid.requestPictureInPicture().catch(function(){}); });
-    }
     root.querySelector('.tlp-close').addEventListener('click', close);
     root.querySelector('.tlp-expand').addEventListener('click', expand);
     root.querySelector('.tlp-size').addEventListener('click', function(){
@@ -2404,7 +2366,6 @@ function tlPopupBoot(){
   function close(){
     if(vid){
       try{ saveProg(true); }catch(e){}
-      try{ if(document.pictureInPictureElement === vid) document.exitPictureInPicture(); }catch(e){}
       try{ vid.pause(); vid.removeAttribute('src'); vid.load(); }catch(e){}
     }
     if(root && root.parentNode) root.parentNode.removeChild(root);
